@@ -1,0 +1,49 @@
+# Configuración de Base de Datos
+database:
+  host: "localhost"
+  port: "5432"
+  user: "postgres"
+  password: "password"
+  name: "auth_db"
+  max_open_conns: 25
+  max_idle_conns: 25
+  conn_max_lifetime: "15m"
+
+# Configuración de Autenticación
+auth:
+  jwt_secret: "tu-secreto-jwt-suficientemente-largo-y-seguro"
+  token_expiration: "24h"
+
+# Configuración del Servidor
+server:
+  port: "3007"
+  read_timeout: "15s"
+  write_timeout: "15s"
+  idle_timeout: "60s"
+  env: "development"
+
+# Configuración SMTP para emails
+smtp:
+  host: "smtp.gmail.com"
+  port: 587
+  username: "hellares98@gmail.com"
+  password: "yexk ovay swck hevz"  # App password de Gmail
+  from: "Sistema Auth <hellares98@gmail.com>"
+
+# URLs para enlaces en emails
+urls:
+  reset_password: "http://0.0.0.0:3007/api/auth/reset-password"
+  verify_email: "http://localhost:3007/api/auth/verify-email"
+
+# Información del sitio
+site:
+  name: "Sistema de Autenticación"
+  # Para producción, cambiar por tu dominio
+  url: "http://0.0.0.0:3007"
+  support_email: "soporte@tusitio.com"
+
+# Configuración RabbitMQ (para comunicación entre microservicios)
+rabbitmq:
+  url: "amqp://admin:admin123@86.48.26.221:5672"
+  exchange: "microservices"
+  queue: "auth_queue"
