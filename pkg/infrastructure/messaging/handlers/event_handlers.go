@@ -24,17 +24,17 @@ import (
 // EmpresaCreatedEvent representa un evento de creación de empresa
 // Este evento llega cuando el microservicio de empresas crea una nueva empresa
 type EmpresaCreatedEvent struct {
-	ID                string    `json:"id"`
-	RazonSocial       string    `json:"razonSocial"`
-	NombreComercial   string    `json:"nombreComercial"`
-	RUC               string    `json:"ruc"`
-	CreadorID         string    `json:"creadorId"`
-	CreadorDNI        string    `json:"creadorDni"`
-	CreadorEmail      string    `json:"creadorEmail"`
-	CreadorNombres    string    `json:"creadorNombres"`
-	CreadorApellidos  string    `json:"creadorApellidos"`
-	CreadorTelefono   string    `json:"creadorTelefono"`
-	CreatedAt         time.Time `json:"createdAt"`
+	ID               string    `json:"id"`
+	RazonSocial      string    `json:"razonSocial"`
+	NombreComercial  string    `json:"nombreComercial"`
+	RUC              string    `json:"ruc"`
+	CreadorID        string    `json:"creadorId"`
+	CreadorDNI       string    `json:"creadorDni"`
+	CreadorEmail     string    `json:"creadorEmail"`
+	CreadorNombres   string    `json:"creadorNombres"`
+	CreadorApellidos string    `json:"creadorApellidos"`
+	CreadorTelefono  string    `json:"creadorTelefono"`
+	CreatedAt        time.Time `json:"createdAt"`
 }
 
 // UsuarioCreatedEvent representa un evento de creación de usuario en una empresa
@@ -69,11 +69,11 @@ type ClienteCreatedEvent struct {
 
 // UserRoleUpdatedEvent representa un cambio de rol de usuario
 type UserRoleUpdatedEvent struct {
-	UserID    string `json:"userId"`
-	EmpresaID string `json:"empresaId"`
-	OldRoleID string `json:"oldRoleId"`
-	NewRoleID string `json:"newRoleId"`
-	UpdatedBy string `json:"updatedBy"`
+	UserID    string    `json:"userId"`
+	EmpresaID string    `json:"empresaId"`
+	OldRoleID string    `json:"oldRoleId"`
+	NewRoleID string    `json:"newRoleId"`
+	UpdatedBy string    `json:"updatedBy"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
@@ -174,10 +174,11 @@ func (h *EventHandler) processEmpresaCreatedEvent(event *EmpresaCreatedEvent) er
 
 	// 1. Verificar si el creador ya existe en el sistema
 	var creatorUser *entities.User
-	
+
 	if event.CreadorID != "" {
 		// Si viene el ID, intentar buscarlo
-		creatorID, err := uuid.Parse(event.CreadorID)
+		var creatorID uuid.UUID
+		creatorID, err = uuid.Parse(event.CreadorID)
 		if err == nil {
 			creatorUser, _ = h.authService.GetUserByID(ctx, creatorID)
 		}
@@ -188,7 +189,7 @@ func (h *EventHandler) processEmpresaCreatedEvent(event *EmpresaCreatedEvent) er
 		creatorUser, err = h.authService.GetUserByDNI(ctx, event.CreadorDNI)
 		if err != nil {
 			log.Printf("Creador no encontrado por DNI, creando nuevo usuario: %s", event.CreadorEmail)
-			
+
 			// 2. Crear usuario si no existe
 			creatorUser, err = h.createUserFromEmpresaEvent(event)
 			if err != nil {
@@ -206,7 +207,7 @@ func (h *EventHandler) processEmpresaCreatedEvent(event *EmpresaCreatedEvent) er
 		log.Printf("Usuario ya es admin de la empresa %s", empresaID)
 	}
 
-	log.Printf("Evento empresa.created procesado exitosamente: empresa=%s, creador=%s", 
+	log.Printf("Evento empresa.created procesado exitosamente: empresa=%s, creador=%s",
 		empresaID, creatorUser.ID)
 
 	return nil
@@ -223,6 +224,8 @@ func (h *EventHandler) createUserFromEmpresaEvent(event *EmpresaCreatedEvent) (*
 	apellidoPaterno, apellidoMaterno := splitApellidos(event.CreadorApellidos)
 
 	// Crear usuario con información completa
+	// Usar fecha cero para fecha de nacimiento por defecto
+	defaultDate := time.Time{}
 	user, err := h.authService.Register(
 		ctx,
 		event.CreadorDNI,
@@ -232,12 +235,12 @@ func (h *EventHandler) createUserFromEmpresaEvent(event *EmpresaCreatedEvent) (*
 		apellidoPaterno,
 		apellidoMaterno,
 		fmt.Sprintf("%s %s %s", event.CreadorNombres, apellidoPaterno, apellidoMaterno),
-		time.Now(), // Fecha de nacimiento por defecto
+		defaultDate, // Fecha de nacimiento por defecto (fecha cero)
 		event.CreadorTelefono,
-		"",  // departamento
-		"",  // provincia
-		"",  // distrito
-		"",  // direccion completa
+		"", // departamento
+		"", // provincia
+		"", // distrito
+		"", // direccion completa
 	)
 
 	if err != nil {
@@ -245,7 +248,7 @@ func (h *EventHandler) createUserFromEmpresaEvent(event *EmpresaCreatedEvent) (*
 	}
 
 	// TODO: Enviar email con contraseña temporal
-	log.Printf("Usuario creado con contraseña temporal: %s (password: %s)", 
+	log.Printf("Usuario creado con contraseña temporal: %s (password: %s)",
 		user.Email, tempPassword)
 
 	return user, nil
@@ -331,7 +334,7 @@ func (h *EventHandler) processUsuarioCreatedEvent(event *UsuarioCreatedEvent) er
 		}
 	}
 
-	log.Printf("Usuario asignado a empresa exitosamente: user=%s, empresa=%s, rol=%s", 
+	log.Printf("Usuario asignado a empresa exitosamente: user=%s, empresa=%s, rol=%s",
 		user.ID, empresaID, roleID)
 
 	return nil
@@ -342,6 +345,8 @@ func (h *EventHandler) createUserFromUsuarioEvent(event *UsuarioCreatedEvent) (*
 	ctx := context.Background()
 	tempPassword := generateTempPassword()
 
+	// Usar fecha cero para fecha de nacimiento por defecto
+	defaultDate := time.Time{}
 	user, err := h.authService.Register(
 		ctx,
 		event.DNI,
@@ -351,7 +356,7 @@ func (h *EventHandler) createUserFromUsuarioEvent(event *UsuarioCreatedEvent) (*
 		event.ApellidoPaterno,
 		event.ApellidoMaterno,
 		fmt.Sprintf("%s %s %s", event.Nombres, event.ApellidoPaterno, event.ApellidoMaterno),
-		time.Now(),
+		defaultDate, // Fecha de nacimiento por defecto (fecha cero)
 		event.Telefono,
 		"", "", "", "",
 	)
@@ -421,7 +426,7 @@ func (h *EventHandler) processClienteCreatedEvent(event *ClienteCreatedEvent) er
 		}
 	}
 
-	log.Printf("Cliente asignado a empresa exitosamente: user=%s, empresa=%s", 
+	log.Printf("Cliente asignado a empresa exitosamente: user=%s, empresa=%s",
 		user.ID, empresaID)
 
 	return nil
@@ -432,6 +437,8 @@ func (h *EventHandler) createUserFromClienteEvent(event *ClienteCreatedEvent) (*
 	ctx := context.Background()
 	tempPassword := generateTempPassword()
 
+	// Usar fecha cero para fecha de nacimiento por defecto
+	defaultDate := time.Time{}
 	user, err := h.authService.Register(
 		ctx,
 		event.DNI,
@@ -441,7 +448,7 @@ func (h *EventHandler) createUserFromClienteEvent(event *ClienteCreatedEvent) (*
 		event.ApellidoPaterno,
 		event.ApellidoMaterno,
 		fmt.Sprintf("%s %s %s", event.Nombres, event.ApellidoPaterno, event.ApellidoMaterno),
-		time.Now(),
+		defaultDate, // Fecha de nacimiento por defecto (fecha cero)
 		event.Telefono,
 		"", "", "", "",
 	)
@@ -513,11 +520,11 @@ func isAlreadyAssignedError(err error) bool {
 	if err == nil {
 		return false
 	}
-	
+
 	errorMsg := err.Error()
-	return strings.Contains(errorMsg, "ya tiene") || 
-		   strings.Contains(errorMsg, "already") ||
-		   strings.Contains(errorMsg, "duplicate")
+	return strings.Contains(errorMsg, "ya tiene") ||
+		strings.Contains(errorMsg, "already") ||
+		strings.Contains(errorMsg, "duplicate")
 }
 
 // ============================================================================

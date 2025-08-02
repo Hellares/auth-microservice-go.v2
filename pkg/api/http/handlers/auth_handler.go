@@ -261,20 +261,23 @@ func min(a, b int) int {
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	// Estructura para la petición con TODOS los campos del usuario
 	var req struct {
-		DNI               string    `json:"dni"`
-		Email             string    `json:"email"`
-		Password          string    `json:"password"`
-		Nombres           string    `json:"nombres"`
-		ApellidoPaterno   string    `json:"apellidoPaterno"`
-		ApellidoMaterno   string    `json:"apellidoMaterno"`
-		NombresCompletos  string    `json:"nombresCompletos,omitempty"` // Se puede calcular automáticamente
-		FechaNacimiento   time.Time `json:"fechaNacimiento,omitempty"`
-		Telefono          string    `json:"telefono"`
-		Departamento      string    `json:"departamento,omitempty"`
-		Provincia         string    `json:"provincia,omitempty"`
-		Distrito          string    `json:"distrito,omitempty"`
-		DireccionCompleta string    `json:"direccionCompleta,omitempty"`
+		DNI               string `json:"dni"`
+		Email             string `json:"email"`
+		Password          string `json:"password"`
+		Nombres           string `json:"nombres"`
+		ApellidoPaterno   string `json:"apellidoPaterno"`
+		ApellidoMaterno   string `json:"apellidoMaterno"`
+		NombresCompletos  string `json:"nombresCompletos,omitempty"` // Se puede calcular automáticamente
+		FechaNacimiento   string `json:"fechaNacimiento,omitempty"`
+		Telefono          string `json:"telefono"`
+		Departamento      string `json:"departamento,omitempty"`
+		Provincia         string `json:"provincia,omitempty"`
+		Distrito          string `json:"distrito,omitempty"`
+		DireccionCompleta string `json:"direccionCompleta,omitempty"`
 	}
+
+	// Declarar variable de error
+	//var err error
 
 	// Decodificar JSON del request body
 	err := json.NewDecoder(r.Body).Decode(&req)
@@ -289,10 +292,25 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validar fecha de nacimiento
-	if req.FechaNacimiento.IsZero() {
-		respondWithError(w, http.StatusBadRequest, "Fecha de nacimiento requerida")
-		return
+	// La fecha de nacimiento es opcional
+	var fechaNacimiento time.Time
+	var parsedTime time.Time
+	if req.FechaNacimiento != "" {
+		parsedTime, err = time.Parse("02-01-2006", req.FechaNacimiento)
+		if err != nil {
+			// Intentar con formato ISO
+			parsedTime, err = time.Parse(time.RFC3339, req.FechaNacimiento)
+			if err != nil {
+				respondWithError(w, http.StatusBadRequest, "Formato de fecha inválido. Use DD-MM-YYYY o formato ISO")
+				return
+			}
+			fechaNacimiento = parsedTime
+		} else {
+			fechaNacimiento = parsedTime
+		}
+	} else {
+		// Si no se proporciona, usar fecha cero
+		fechaNacimiento = time.Time{}
 	}
 
 	// Generar nombres completos automáticamente si no se proporciona
@@ -304,7 +322,8 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Llamar al servicio de autenticación con todos los parámetros
-	user, err := h.authService.Register(
+	var user *entities.User
+	user, err = h.authService.Register(
 		r.Context(),
 		req.DNI,
 		req.Email,
@@ -313,7 +332,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		req.ApellidoPaterno,
 		req.ApellidoMaterno,
 		req.NombresCompletos,
-		req.FechaNacimiento,
+		fechaNacimiento,
 		req.Telefono,
 		req.Departamento,
 		req.Provincia,
@@ -384,68 +403,6 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// // SelectEmpresa maneja la selección de empresa específica después del login
-// // Genera un nuevo token con contexto de empresa
-// func (h *AuthHandler) SelectEmpresa(w http.ResponseWriter, r *http.Request) {
-// 	// Extraer token básico del header
-// 	token := extractToken(r)
-// 	if token == "" {
-// 		respondWithError(w, http.StatusUnauthorized, "No autorizado")
-// 		return
-// 	}
-
-// 	// Verificar token básico
-// 	claims, err := h.authService.VerifyToken(r.Context(), token)
-// 	if err != nil {
-// 		respondWithError(w, http.StatusUnauthorized, err.Error())
-// 		return
-// 	}
-
-// 	// Estructura para la empresa seleccionada
-// 	var req struct {
-// 		EmpresaID uuid.UUID `json:"empresaId"`
-// 	}
-
-// 	// Decodificar request
-// 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-// 		respondWithError(w, http.StatusBadRequest, "Petición inválida")
-// 		return
-// 	}
-
-// 	userID := uuid.MustParse(claims.UserID)
-
-// 	// Verificar que el usuario pertenece a esa empresa
-// 	hasAccess, err := h.authService.UserBelongsToEmpresa(r.Context(), userID, req.EmpresaID)
-// 	if err != nil || !hasAccess {
-// 		respondWithError(w, http.StatusForbidden, "No tienes acceso a esta empresa")
-// 		return
-// 	}
-
-// 	// Generar nuevo token con empresa seleccionada
-// 	newToken, err := h.authService.GenerateTokenWithEmpresa(r.Context(), userID, req.EmpresaID)
-// 	if err != nil {
-// 		respondWithError(w, http.StatusInternalServerError, "Error generando token")
-// 		return
-// 	}
-
-// 	// Obtener roles y permisos específicos para la empresa seleccionada
-// 	roles, err := h.authService.GetUserRoles(r.Context(), userID, req.EmpresaID)
-// 	if err != nil {
-// 		respondWithError(w, http.StatusInternalServerError, "Error obteniendo roles")
-// 		return
-// 	}
-
-// 	// Responder con nuevo token y contexto de empresa
-// 	respondWithJSON(w, http.StatusOK, Response{
-// 		Success: true,
-// 		Data: map[string]interface{}{
-// 			"token":     newToken,       // Nuevo token con empresa específica
-// 			"empresaId": req.EmpresaID,  // ID de empresa seleccionada
-// 			"roles":     roles,          // Roles del usuario en esa empresa
-// 		},
-// 	})
-// }
-
 func (h *AuthHandler) SelectEmpresa(w http.ResponseWriter, r *http.Request) {
     defer r.Body.Close() // Cerrar el body de la solicitud
 
@@ -475,7 +432,7 @@ func (h *AuthHandler) SelectEmpresa(w http.ResponseWriter, r *http.Request) {
     }
 
     // Decodificar request
-    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+    if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
         respondWithError(w, http.StatusBadRequest, "Petición inválida")
         return
     }
@@ -483,21 +440,24 @@ func (h *AuthHandler) SelectEmpresa(w http.ResponseWriter, r *http.Request) {
     userID := uuid.MustParse(claims.UserID)
 
     // Verificar que el usuario pertenece a esa empresa
-    hasAccess, err := h.authService.UserBelongsToEmpresa(r.Context(), userID, req.EmpresaID)
+    var hasAccess bool
+    hasAccess, err = h.authService.UserBelongsToEmpresa(r.Context(), userID, req.EmpresaID)
     if err != nil || !hasAccess {
         respondWithError(w, http.StatusForbidden, "No tienes acceso a esta empresa")
         return
     }
 
     // Generar nuevo token con empresa seleccionada
-    newToken, err := h.authService.GenerateTokenWithEmpresa(r.Context(), userID, req.EmpresaID)
+    var newToken string
+    newToken, err = h.authService.GenerateTokenWithEmpresa(r.Context(), userID, req.EmpresaID)
     if err != nil {
         respondWithError(w, http.StatusInternalServerError, "Error generando token")
         return
     }
 
     // Obtener roles y permisos específicos para la empresa seleccionada
-    roles, err := h.authService.GetUserRoles(r.Context(), userID, req.EmpresaID)
+    var roles []*entities.Role
+    roles, err = h.authService.GetUserRoles(r.Context(), userID, req.EmpresaID)
     if err != nil {
         respondWithError(w, http.StatusInternalServerError, "Error obteniendo roles")
         return
@@ -562,44 +522,6 @@ func (h *AuthHandler) VerifyEmail(w http.ResponseWriter, r *http.Request) {
 		Message: "Email verificado con éxito",
 	})
 }
-
-// RequestPasswordReset solicita un reseteo de contraseña
-// Envía un email con token de reseteo al usuario
-// func (h *AuthHandler) RequestPasswordReset(w http.ResponseWriter, r *http.Request) {
-// 	// Estructura simple para email
-// 	var req struct {
-// 		Email string `json:"email"`
-// 	}
-
-// 	// Decodificar request
-// 	err := json.NewDecoder(r.Body).Decode(&req)
-// 	if err != nil {
-// 		respondWithError(w, http.StatusBadRequest, "Petición inválida")
-// 		return
-// 	}
-
-// 	// Validar email requerido
-// 	if req.Email == "" {
-// 		respondWithError(w, http.StatusBadRequest, "Email requerido")
-// 		return
-// 	}
-
-// 	// Solicitar reseteo a través del servicio
-// 	token, err := h.authService.RequestPasswordReset(r.Context(), req.Email)
-// 	if err != nil {
-// 		respondWithError(w, http.StatusBadRequest, err.Error())
-// 		return
-// 	}
-
-// 	// Responder con éxito (incluir token solo para desarrollo/testing)
-// 	respondWithJSON(w, http.StatusOK, Response{
-// 		Success: true,
-// 		Message: "Solicitud de reseteo de contraseña enviada",
-// 		Data: map[string]string{
-// 			"token": token.Token, // Solo para testing - remover en producción
-// 		},
-// 	})
-// }
 
 // RequestPasswordReset solicita un reseteo de contraseña
 // Envía un email con token de reseteo al usuario
@@ -686,6 +608,7 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verificar token y obtener claims
+	// var err error
 	claims, err := h.authService.VerifyToken(r.Context(), token)
 	if err != nil {
 		respondWithError(w, http.StatusUnauthorized, err.Error())
@@ -871,123 +794,6 @@ func (h *AuthHandler) FindUserByIdentifier(w http.ResponseWriter, r *http.Reques
 	})
 }
 
-// // ListAllUsers lista todos los usuarios del sistema (solo SUPER_ADMIN)
-// // Incluye paginación y filtros por estado y búsqueda
-// func (h *AuthHandler) ListAllUsers(w http.ResponseWriter, r *http.Request) {
-// 	// Verificar autenticación básica
-// 	token := extractToken(r)
-// 	if token == "" {
-// 		respondWithPaginatedError(w, http.StatusUnauthorized, "Token de autorización requerido")
-// 		return
-// 	}
-
-// 	// Verificar token y obtener claims
-// 	claims, err := h.authService.VerifyToken(r.Context(), token)
-// 	if err != nil {
-// 		respondWithPaginatedError(w, http.StatusUnauthorized, "Token inválido o expirado")
-// 		return
-// 	}
-
-// 	// Obtener ID del usuario del token
-// 	currentUserID, err := uuid.Parse(claims.UserID)
-// 	if err != nil {
-// 		respondWithPaginatedError(w, http.StatusInternalServerError, "Error en el token")
-// 		return
-// 	}
-
-// 	// VERIFICACIÓN CRÍTICA: Solo SUPER_ADMIN puede listar todos los usuarios
-// 	isSuperAdmin, err := h.authService.HasSystemRole(r.Context(), currentUserID, "SUPER_ADMIN")
-// 	if err != nil {
-// 		log.Printf("Error verificando rol SUPER_ADMIN: %v", err)
-// 		respondWithPaginatedError(w, http.StatusInternalServerError, "Error verificando permisos")
-// 		return
-// 	}
-
-// 	if !isSuperAdmin {
-// 		respondWithPaginatedError(w, http.StatusForbidden, "Acceso denegado. Se requiere rol SUPER_ADMIN")
-// 		return
-// 	}
-
-// 	// Validar parámetros de paginación
-// 	pageStr := r.URL.Query().Get("page")
-// 	limitStr := r.URL.Query().Get("limit")
-// 	page, limit, validationErrors := validatePaginationParams(pageStr, limitStr)
-
-// 	if len(validationErrors) > 0 {
-// 		respondWithValidationError(w, validationErrors)
-// 		return
-// 	}
-
-// 	// Preparar filtros adicionales
-// 	filters := make(map[string]string)
-
-// 	// Filtro por estado (ACTIVE, INACTIVE, BLOCKED)
-// 	if status := r.URL.Query().Get("status"); status != "" {
-// 		validStatuses := []string{
-// 			string(entities.UserStatusActive),
-// 			string(entities.UserStatusInactive),
-// 			string(entities.UserStatusBlocked),
-// 		}
-// 		isValid := false
-// 		for _, validStatus := range validStatuses {
-// 			if status == validStatus {
-// 				isValid = true
-// 				break
-// 			}
-// 		}
-
-// 		if !isValid {
-// 			errors := []ErrorDetail{{
-// 				Code:    "INVALID_STATUS",
-// 				Message: "El estado especificado no es válido",
-// 				Field:   "status",
-// 				Meta: map[string]interface{}{
-// 					"validStatuses": validStatuses,
-// 				},
-// 			}}
-// 			respondWithValidationError(w, errors)
-// 			return
-// 		}
-
-// 		filters["status"] = status
-// 	}
-
-// 	// Filtro por texto de búsqueda (nombre, apellido, email, DNI)
-// 	if searchTerm := r.URL.Query().Get("search"); searchTerm != "" {
-// 		filters["search"] = searchTerm
-// 	}
-
-// 	// Obtener usuarios con paginación y filtros
-// 	users, total, err := h.authService.ListAllUsers(r.Context(), page, limit, filters)
-// 	if err != nil {
-// 		log.Printf("Error obteniendo usuarios: %v", err)
-// 		respondWithPaginatedError(w, http.StatusInternalServerError, "Error al obtener usuarios")
-// 		return
-// 	}
-
-// 	// Calcular información de paginación
-// 	totalPages := (total + limit - 1) / limit
-
-// 	// Responder con usuarios y metadata de paginación
-// 	response := PaginatedResponse{
-// 		Success: true,
-// 		Message: "Usuarios obtenidos exitosamente",
-// 		Data:    users,
-// 		Pagination: map[string]interface{}{
-// 			"page":       page,
-// 			"limit":      limit,
-// 			"total":      total,
-// 			"totalPages": totalPages,
-// 			"hasNext":    page < totalPages,
-// 			"hasPrev":    page > 1,
-// 			"from":       (page-1)*limit + 1,
-// 			"to":         min(page*limit, total),
-// 		},
-// 	}
-
-// 	respondWithPaginatedJSON(w, http.StatusOK, response)
-// }
-
 // ListAllUsers lista todos los usuarios del sistema (solo SUPER_ADMIN)
 // Incluye paginación y filtros por estado y búsqueda
 func (h *AuthHandler) ListAllUsers(w http.ResponseWriter, r *http.Request) {
@@ -1001,6 +807,7 @@ func (h *AuthHandler) ListAllUsers(w http.ResponseWriter, r *http.Request) {
     }
 
     // Verificar token y obtener claims
+
     claims, err := h.authService.VerifyToken(r.Context(), token)
     if err != nil {
         respondWithPaginatedError(w, http.StatusUnauthorized, "Token inválido o expirado")
@@ -1147,7 +954,8 @@ func (h *AuthHandler) GetUserRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	empresaID, err := uuid.Parse(empresaIDStr)
+	var empresaID uuid.UUID
+	empresaID, err = uuid.Parse(empresaIDStr)
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "ID de empresa inválido")
 		return
@@ -1247,7 +1055,8 @@ func (h *AuthHandler) GetAllUserPermissions(w http.ResponseWriter, r *http.Reque
 
 	// Obtener ID del usuario objetivo de la URL
 	vars := mux.Vars(r)
-	userID, err := uuid.Parse(vars["id"])
+	var userID uuid.UUID
+	userID, err = uuid.Parse(vars["id"])
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "ID de usuario inválido")
 		return
@@ -1258,7 +1067,8 @@ func (h *AuthHandler) GetAllUserPermissions(w http.ResponseWriter, r *http.Reque
 		currentUserID := uuid.MustParse(claims.UserID)
 
 		// Verificar si es SUPER_ADMIN del sistema
-		isSuperAdmin, err := h.authService.HasSystemRole(r.Context(), currentUserID, "SUPER_ADMIN")
+		var isSuperAdmin bool
+		isSuperAdmin, err = h.authService.HasSystemRole(r.Context(), currentUserID, "SUPER_ADMIN")
 		if err != nil {
 			log.Printf("Error verificando rol de sistema: %v", err)
 			respondWithError(w, http.StatusInternalServerError, "Error verificando permisos")
@@ -1285,7 +1095,8 @@ func (h *AuthHandler) GetAllUserPermissions(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Obtener todos los roles del usuario en la empresa
-	roles, err := h.authService.GetUserRoles(r.Context(), userID, empresaID)
+	var roles []*entities.Role
+	roles, err = h.authService.GetUserRoles(r.Context(), userID, empresaID)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -1307,7 +1118,8 @@ func (h *AuthHandler) GetAllUserPermissions(w http.ResponseWriter, r *http.Reque
 		response.Roles = append(response.Roles, role.Name)
 
 		// Obtener permisos específicos del rol
-		permissions, err := h.authService.GetPermissionsByRole(r.Context(), role.ID)
+		var permissions []*entities.Permission
+		permissions, err = h.authService.GetPermissionsByRole(r.Context(), role.ID)
 		if err != nil {
 			log.Printf("Error obteniendo permisos del rol %s: %v", role.Name, err)
 			continue
@@ -1680,6 +1492,7 @@ func (h *AuthHandler) GetUsersByEmpresa(w http.ResponseWriter, r *http.Request) 
 		// SUPER_ADMIN puede ver todo, continuar con la operación
 	} else {
 		// Segundo nivel: Verificar permisos específicos en la empresa
+		
 		hasPermission, err := h.authService.HasPermission(r.Context(), currentUserID, empresaID, "ADMIN_USERS")
 		if err != nil {
 			respondWithPaginatedError(w, http.StatusInternalServerError, "Error al verificar permisos")

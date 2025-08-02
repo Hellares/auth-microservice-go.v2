@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/smtp"
+	"strings"
 
 	"auth-microservice-go.v2/pkg/application/ports"
 	"auth-microservice-go.v2/pkg/domain/entities"
@@ -238,6 +239,30 @@ func (s *SMTPEmailSender) sendEmail(to, subject, templateName string, data ports
 		return fmt.Errorf("error ejecutando template: %v", err)
 	}
 
+	// Asegurar que el formato del campo From sea correcto
+	// El formato debe ser: "Nombre <email@dominio.com>"
+	// Si ya tiene los símbolos <>, no los agregamos de nuevo
+	fromField := s.config.From
+	if !strings.Contains(fromField, "<") && !strings.Contains(fromField, ">") {
+		// Extraer el nombre y el email
+		parts := strings.Split(fromField, " ")
+		if len(parts) > 1 {
+			// Si tiene formato "Nombre email@dominio.com", convertirlo a "Nombre <email@dominio.com>"
+			email := parts[len(parts)-1]
+			name := strings.Join(parts[:len(parts)-1], " ")
+			fromField = fmt.Sprintf("%s <%s>", name, email)
+		} else {
+			// Si solo es el email, ponerlo entre <>
+			fromField = fmt.Sprintf("<%s>", fromField)
+		}
+	}
+
+	// Asegurar que el campo To tenga el formato correcto
+	toField := to
+	if !strings.Contains(toField, "<") && !strings.Contains(toField, ">") {
+		toField = fmt.Sprintf("<%s>", toField)
+	}
+
 	// Construir mensaje con headers
 	message := []byte(fmt.Sprintf(
 		"From: %s\r\n"+
@@ -248,8 +273,8 @@ func (s *SMTPEmailSender) sendEmail(to, subject, templateName string, data ports
 			"X-Mailer: Auth Microservice\r\n"+
 			"\r\n"+
 			"%s",
-		s.config.From,
-		to,
+		fromField,
+		toField,
 		subject,
 		body.String()))
 
@@ -258,7 +283,7 @@ func (s *SMTPEmailSender) sendEmail(to, subject, templateName string, data ports
 	addr := fmt.Sprintf("%s:%d", s.config.Host, s.config.Port)
 
 	// Enviar email
-	err := smtp.SendMail(addr, auth, s.config.From, []string{to}, message)
+	err := smtp.SendMail(addr, auth, s.config.Username, []string{to}, message)
 	if err != nil {
 		return fmt.Errorf("error enviando email: %v", err)
 	}
