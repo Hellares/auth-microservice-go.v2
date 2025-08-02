@@ -266,10 +266,10 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		Password          string    `json:"password"`
 		Nombres           string    `json:"nombres"`
 		ApellidoPaterno   string    `json:"apellidoPaterno"`
-		ApellidoMaterno   string    `json:"apellidoMaterno,omitempty"`
+		ApellidoMaterno   string    `json:"apellidoMaterno"`
 		NombresCompletos  string    `json:"nombresCompletos,omitempty"` // Se puede calcular automáticamente
-		FechaNacimiento   time.Time `json:"fechaNacimiento"`
-		Telefono          string    `json:"telefono,omitempty"`
+		FechaNacimiento   time.Time `json:"fechaNacimiento,omitempty"`
+		Telefono          string    `json:"telefono"`
 		Departamento      string    `json:"departamento,omitempty"`
 		Provincia         string    `json:"provincia,omitempty"`
 		Distrito          string    `json:"distrito,omitempty"`

@@ -1,10 +1,10 @@
 # Configuración de Base de Datos
 database:
-  host: "localhost"
+  host: "86.48.26.221"
   port: "5432"
   user: "postgres"
-  password: "password"
-  name: "auth_db"
+  password: "jtorres159."
+  name: "auth_v2"
   max_open_conns: 25
   max_idle_conns: 25
   conn_max_lifetime: "15m"
@@ -27,8 +27,8 @@ smtp:
   host: "smtp.gmail.com"
   port: 587
   username: "hellares98@gmail.com"
-  password: "yexk ovay swck hevz"  # App password de Gmail
-  from: "Sistema Auth <hellares98@gmail.com>"
+  password: "yexk ovay swck hevz"
+  from: "Autenticación <hellares98@gmail.com>"
 
 # URLs para enlaces en emails
 urls:
@@ -40,7 +40,7 @@ site:
   name: "Sistema de Autenticación"
   # Para producción, cambiar por tu dominio
   url: "http://0.0.0.0:3007"
-  support_email: "soporte@tusitio.com"
+  support_email: "hellares98@gmail.com"
 
 # Configuración RabbitMQ (para comunicación entre microservicios)
 rabbitmq:

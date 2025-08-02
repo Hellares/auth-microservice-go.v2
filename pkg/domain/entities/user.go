@@ -20,7 +20,7 @@ type User struct {
 	ApellidoPaterno     string      `json:"apellido_paterno"`
 	ApellidoMaterno     string      `json:"apellido_materno"`
 	NombresCompletos 	string      `json:"nombres_completos"`
-	FechaNacimiento 	time.Time   `json:"fecha_nacimiento"`
+	FechaNacimiento 	time.Time   `json:"fecha_nacimiento,omitempty"`
 	Departamento   		string      `json:"departamento"`
 	Provincia	   		string      `json:"provincia"`
 	Distrito	   		string      `json:"distrito"`
