@@ -1,46 +1,66 @@
+# ============================================================================
+# DOCKERFILE PARA AUTH MICROSERVICE - OPTIMIZADO PARA VPS
+# ============================================================================
+
+# Etapa 1: Build
 FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
 # Instalar dependencias necesarias
-RUN apk add --no-cache git
+RUN apk add --no-cache git ca-certificates
 
-# Copiar archivos de dependencias
+# Copiar go.mod y go.sum
 COPY go.mod go.sum ./
 
 # Descargar dependencias
 RUN go mod download
 
-# Copiar el código fuente
+# Copiar código fuente
 COPY . .
 
-# Compilar la aplicación completa (único binario)
-RUN CGO_ENABLED=0 GOOS=linux go build -o auth-service .
+# Compilar binarios estáticos
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags='-w -s' -o auth-api ./cmd/api/
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags='-w -s' -o auth-worker ./cmd/worker/
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags='-w -s' -o auth-service .
 
-# Etapa de producción
-FROM alpine:latest
+# Etapa 2: Runtime
+FROM alpine:3.19
+
+# Instalar dependencias runtime
+RUN apk add --no-cache ca-certificates tzdata curl
+
+# Crear usuario no-root
+RUN addgroup -g 1001 -S appgroup && \
+    adduser -u 1001 -S appuser -G appgroup
 
 WORKDIR /app
 
-# Instalar dependencias necesarias
-RUN apk add --no-cache ca-certificates tzdata curl
+# Crear directorios
+RUN mkdir -p config static logs && \
+    chown -R appuser:appgroup /app
 
-# Copiar el binario compilado desde la etapa de build
-COPY --from=builder /app/auth-service .
+# Copiar binarios
+COPY --from=builder --chown=appuser:appgroup /app/auth-api ./
+COPY --from=builder --chown=appuser:appgroup /app/auth-worker ./
+COPY --from=builder --chown=appuser:appgroup /app/auth-service ./
 
-# Crear directorios para configuración, estáticos y logs
-RUN mkdir -p config static logs && chmod -R 777 logs
+# Copiar archivos de configuración
+COPY --chown=appuser:appgroup static/ ./static/
+COPY --chown=appuser:appgroup config/ ./config/
 
-# Copiar archivos estáticos y de configuración
-COPY static/ ./static/
-COPY config/ ./config/
+# Hacer ejecutables
+RUN chmod +x ./auth-api ./auth-worker ./auth-service
+
+# Cambiar a usuario no-root
+USER appuser
 
 # Exponer puerto
 EXPOSE 3007
 
-# Healthcheck básico
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:3007/health || exit 1
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:3007/health || exit 1
 
-# Comando para iniciar la aplicación
+# Comando por defecto
 CMD ["./auth-service"]

@@ -1,114 +1,4 @@
-// // main.go
-// package main
-
-// import (
-// 	"context"
-// 	"fmt"
-// 	"log"
-// 	"net/http"
-// 	"os"
-// 	"os/signal"
-// 	"syscall"
-// 	"time"
-
-// 	"github.com/spf13/viper"
-
-// 	"auth-microservice-go.v2/pkg/api/http/server"
-// )
-
-// func main() {
-// 	// Configurar logger con más información
-// 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-// 	log.Println("🚀 Iniciando Auth Microservice...")
-
-// 	// Cargar configuración
-// 	log.Println("📖 Cargando configuración...")
-// 	if err := server.LoadConfig(); err != nil {
-// 		log.Fatalf("❌ Error al cargar la configuración: %v", err)
-// 	}
-// 	log.Println("✅ Configuración cargada exitosamente")
-
-// 	// Mostrar configuración (sin datos sensibles)
-// 	log.Printf("🔧 Entorno: %s", viper.GetString("server.env"))
-// 	log.Printf("🔧 Puerto: %s", viper.GetString("server.port"))
-// 	log.Printf("🔧 Base de datos: %s:%s/%s", 
-// 		viper.GetString("database.host"),
-// 		viper.GetString("database.port"),
-// 		viper.GetString("database.name"))
-
-// 	// Intentar conectar a la base de datos (opcional por ahora)
-// 	log.Println("🗄️  Intentando conectar a la base de datos...")
-// 	db, err := server.ConnectDB()
-// 	if err != nil {
-// 		log.Printf("⚠️  No se pudo conectar a la base de datos: %v", err)
-// 		log.Println("⚠️  Continuando sin base de datos (solo para testing)")
-// 		db = nil
-// 	} else {
-// 		defer db.Close()
-// 		log.Println("✅ Conexión a base de datos establecida")
-// 	}
-
-// 	// Configurar router
-// 	log.Println("🌐 Configurando rutas...")
-// 	router := server.SetupRouter()
-
-// 	// TODO: Cuando tengamos repositorios implementados:
-// 	// authService := server.InitializeServices(db)
-// 	// authHandler := handlers.NewAuthHandler(authService)
-// 	// authHandler.RegisterRoutes(router.PathPrefix("/api/auth").Subrouter())
-
-// 	log.Println("✅ Rutas configuradas")
-
-// 	// Configurar servidor HTTP
-// 	port := viper.GetString("server.port")
-// 	if port == "" {
-// 		port = "3007"
-// 	}
-
-// 	srv := &http.Server{
-// 		Addr:         fmt.Sprintf(":%s", port),
-// 		Handler:      router,
-// 		ReadTimeout:  viper.GetDuration("server.read_timeout"),
-// 		WriteTimeout: viper.GetDuration("server.write_timeout"),
-// 		IdleTimeout:  viper.GetDuration("server.idle_timeout"),
-// 	}
-
-// 	// Iniciar el servidor en una goroutine
-// 	go func() {
-// 		log.Printf("🌟 Servidor iniciado en http://localhost:%s", port)
-// 		log.Println("📋 Endpoints disponibles:")
-// 		log.Println("   GET  /health              - Health check")
-// 		log.Println("   GET  /api/auth/test       - Test endpoint")
-// 		log.Println("   GET  /email-verified.html - Email verification page")
-// 		log.Println("   GET  /static/*            - Static files")
-// 		log.Println("")
-// 		log.Println("🛑 Presiona Ctrl+C para detener el servidor")
-		
-// 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-// 			log.Fatalf("❌ Error al iniciar el servidor: %v", err)
-// 		}
-// 	}()
-
-// 	// Capturar señales para shutdown graceful
-// 	quit := make(chan os.Signal, 1)
-// 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-// 	<-quit
-// 	log.Println("🛑 Señal de apagado recibida...")
-
-// 	// Dar tiempo para que se completen las operaciones en curso
-// 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-// 	defer cancel()
-
-// 	log.Println("⏳ Cerrando servidor gracefully...")
-// 	if err := srv.Shutdown(ctx); err != nil {
-// 		log.Fatalf("❌ Error durante el apagado del servidor: %v", err)
-// 	}
-
-// 	log.Println("✅ Servidor cerrado correctamente")
-// 	log.Println("👋 ¡Hasta luego!")
-// }
-
-// main.go
+// main.go - Versión optimizada para producción
 package main
 
 import (
@@ -183,6 +73,12 @@ func main() {
 		log.Fatalf("❌ Modo inválido: %s. Use 'all', 'api' o 'worker'", *mode)
 	}
 
+	// Detectar si estamos en un contenedor Docker
+	isDocker := isRunningInDocker()
+	if isDocker {
+		log.Println("🐳 Detectado entorno Docker")
+	}
+
 	// Crear y configurar el manejador de procesos
 	pm := &ProcessManager{
 		mode:     *mode,
@@ -194,7 +90,7 @@ func main() {
 	signal.Notify(pm.shutdown, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 
 	// Iniciar los componentes según el modo
-	if err := pm.StartComponents(); err != nil {
+	if err := pm.StartComponents(isDocker); err != nil {
 		log.Fatalf("❌ Error iniciando componentes: %v", err)
 	}
 
@@ -219,27 +115,27 @@ func main() {
 // ============================================================================
 
 // StartComponents inicia los componentes según el modo especificado
-func (pm *ProcessManager) StartComponents() error {
+func (pm *ProcessManager) StartComponents(isDocker bool) error {
 	log.Printf("🎯 Modo de ejecución: %s", pm.mode)
 
 	switch pm.mode {
 	case ModeAll:
-		return pm.startBothComponents()
+		return pm.startBothComponents(isDocker)
 	case ModeAPI:
-		return pm.startAPIOnly()
+		return pm.startAPIOnly(isDocker)
 	case ModeWorker:
-		return pm.startWorkerOnly()
+		return pm.startWorkerOnly(isDocker)
 	default:
 		return fmt.Errorf("modo no soportado: %s", pm.mode)
 	}
 }
 
 // startBothComponents inicia tanto el API como el Worker
-func (pm *ProcessManager) startBothComponents() error {
+func (pm *ProcessManager) startBothComponents(isDocker bool) error {
 	log.Println("🔄 Iniciando API Server y Worker...")
 
 	// Iniciar API Server
-	if err := pm.startAPI(); err != nil {
+	if err := pm.startAPI(isDocker); err != nil {
 		return fmt.Errorf("error iniciando API: %v", err)
 	}
 
@@ -247,7 +143,7 @@ func (pm *ProcessManager) startBothComponents() error {
 	time.Sleep(2 * time.Second)
 
 	// Iniciar Worker
-	if err := pm.startWorker(); err != nil {
+	if err := pm.startWorker(isDocker); err != nil {
 		// Si el worker falla, detener el API también
 		pm.stopAPI()
 		return fmt.Errorf("error iniciando Worker: %v", err)
@@ -260,10 +156,10 @@ func (pm *ProcessManager) startBothComponents() error {
 }
 
 // startAPIOnly inicia solo el API Server
-func (pm *ProcessManager) startAPIOnly() error {
+func (pm *ProcessManager) startAPIOnly(isDocker bool) error {
 	log.Println("🌐 Iniciando solo API Server...")
 
-	if err := pm.startAPI(); err != nil {
+	if err := pm.startAPI(isDocker); err != nil {
 		return fmt.Errorf("error iniciando API: %v", err)
 	}
 
@@ -274,10 +170,10 @@ func (pm *ProcessManager) startAPIOnly() error {
 }
 
 // startWorkerOnly inicia solo el Worker
-func (pm *ProcessManager) startWorkerOnly() error {
+func (pm *ProcessManager) startWorkerOnly(isDocker bool) error {
 	log.Println("⚙️  Iniciando solo Worker...")
 
-	if err := pm.startWorker(); err != nil {
+	if err := pm.startWorker(isDocker); err != nil {
 		return fmt.Errorf("error iniciando Worker: %v", err)
 	}
 
@@ -288,12 +184,30 @@ func (pm *ProcessManager) startWorkerOnly() error {
 }
 
 // startAPI inicia el proceso del API Server
-func (pm *ProcessManager) startAPI() error {
+func (pm *ProcessManager) startAPI(isDocker bool) error {
 	pm.mutex.Lock()
 	defer pm.mutex.Unlock()
 
-	// Configurar comando del API
-	pm.apiCmd = exec.Command("go", "run", "cmd/api/main.go")
+	var cmd *exec.Cmd
+
+	if isDocker {
+		// En Docker, usar el binario compilado
+		cmd = exec.Command("./auth-api")
+	} else {
+		// En desarrollo, usar go run si está disponible
+		if isGoAvailable() {
+			cmd = exec.Command("go", "run", "cmd/api/main.go")
+		} else {
+			// Fallback: intentar usar binario local si existe
+			if _, err := os.Stat("./auth-api"); err == nil {
+				cmd = exec.Command("./auth-api")
+			} else {
+				return fmt.Errorf("ni 'go' ni binario './auth-api' están disponibles")
+			}
+		}
+	}
+
+	pm.apiCmd = cmd
 	pm.apiCmd.Stdout = os.Stdout
 	pm.apiCmd.Stderr = os.Stderr
 	
@@ -310,12 +224,30 @@ func (pm *ProcessManager) startAPI() error {
 }
 
 // startWorker inicia el proceso del Worker
-func (pm *ProcessManager) startWorker() error {
+func (pm *ProcessManager) startWorker(isDocker bool) error {
 	pm.mutex.Lock()
 	defer pm.mutex.Unlock()
 
-	// Configurar comando del Worker
-	pm.workerCmd = exec.Command("go", "run", "cmd/worker/main.go")
+	var cmd *exec.Cmd
+
+	if isDocker {
+		// En Docker, usar el binario compilado
+		cmd = exec.Command("./auth-worker")
+	} else {
+		// En desarrollo, usar go run si está disponible
+		if isGoAvailable() {
+			cmd = exec.Command("go", "run", "cmd/worker/main.go")
+		} else {
+			// Fallback: intentar usar binario local si existe
+			if _, err := os.Stat("./auth-worker"); err == nil {
+				cmd = exec.Command("./auth-worker")
+			} else {
+				return fmt.Errorf("ni 'go' ni binario './auth-worker' están disponibles")
+			}
+		}
+	}
+
+	pm.workerCmd = cmd
 	pm.workerCmd.Stdout = os.Stdout
 	pm.workerCmd.Stderr = os.Stderr
 	
@@ -474,6 +406,63 @@ func isValidMode(mode string) bool {
 	return false
 }
 
+// isRunningInDocker detecta si estamos ejecutando en un contenedor Docker
+func isRunningInDocker() bool {
+	// Método 1: Verificar archivo .dockerenv
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		return true
+	}
+
+	// Método 2: Verificar cgroup
+	if data, err := os.ReadFile("/proc/1/cgroup"); err == nil {
+		content := string(data)
+		if len(content) > 0 && (
+			// Docker patterns
+			contains(content, "docker") ||
+			contains(content, "/docker/") ||
+			// Kubernetes patterns
+			contains(content, "kubepods") ||
+			// Container patterns
+			contains(content, "container")) {
+			return true
+		}
+	}
+
+	// Método 3: Verificar hostname (contenedores suelen tener hostnames aleatorios)
+	hostname, _ := os.Hostname()
+	if len(hostname) == 12 || len(hostname) == 64 {
+		// Docker containers often have 12-char or 64-char hostnames
+		return true
+	}
+
+	return false
+}
+
+// contains verifica si una cadena contiene una subcadena
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || 
+		len(s) > len(substr) && (
+			s[:len(substr)] == substr ||
+			s[len(s)-len(substr):] == substr ||
+			stringContains(s, substr)))
+}
+
+// stringContains implementación simple de contains
+func stringContains(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
+// isGoAvailable verifica si el comando 'go' está disponible
+func isGoAvailable() bool {
+	_, err := exec.LookPath("go")
+	return err == nil
+}
+
 // logSystemInfo muestra información del sistema
 func logSystemInfo() {
 	log.Printf("💻 Sistema: %s/%s", runtime.GOOS, runtime.GOARCH)
@@ -546,7 +535,7 @@ func showVersion() {
 // getVersion retorna la versión del microservicio
 func getVersion() string {
 	// En producción, esto debería venir de build flags
-	return "1.0.0-dev"
+	return "1.0.0-production"
 }
 
 // getBuildTime retorna la fecha de compilación
@@ -560,4 +549,3 @@ func getGitCommit() string {
 	// En producción, esto debería venir de build flags
 	return "unknown"
 }
-

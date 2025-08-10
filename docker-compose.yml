@@ -1,9 +1,12 @@
-
 version: '3.8'
 
 networks:
   elastika-network:
     external: true
+
+volumes:
+  auth_logs:
+    driver: local
 
 services:
   auth-service:
@@ -13,22 +16,84 @@ services:
     image: auth-microservice:1.0.0
     container_name: auth-microservice
     restart: unless-stopped
+    
+    environment:
+      # Base de datos
+      DATABASE_HOST: 86.48.26.221
+      DATABASE_PORT: 5432
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: jtorres159.
+      DATABASE_NAME: auth_v2
+      DATABASE_MAX_OPEN_CONNS: 25
+      DATABASE_MAX_IDLE_CONNS: 25
+      DATABASE_CONN_MAX_LIFETIME: 15m
+      
+      # Servidor
+      SERVER_PORT: 3007
+      SERVER_ENV: production
+      SERVER_READ_TIMEOUT: 15s
+      SERVER_WRITE_TIMEOUT: 15s
+      SERVER_IDLE_TIMEOUT: 60s
+      
+      # JWT - CAMBIAR ESTE SECRETO EN PRODUCCIÓN
+      AUTH_JWT_SECRET: "tu-secreto-jwt-suficientemente-largo-y-seguro"
+      AUTH_TOKEN_EXPIRATION: 24h
+      
+      # SMTP
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: 587
+      SMTP_USERNAME: hellares98@gmail.com
+      SMTP_PASSWORD: "yexk ovay swck hevz"
+      SMTP_FROM: "Autenticación <hellares98@gmail.com>"
+      
+      # URLs - cambiar por tu IP/dominio
+      URLS_RESET_PASSWORD: "http://localhost:3007/api/auth/reset-password"
+      URLS_VERIFY_EMAIL: "http://localhost:3007/api/auth/verify-email"
+      
+      # Sitio
+      SITE_NAME: "Sistema de Autenticación"
+      SITE_URL: "http://localhost:3007"
+      SITE_SUPPORT_EMAIL: "hellares98@gmail.com"
+      
+      # RabbitMQ
+      RABBITMQ_URL: "amqp://admin:admin123@rabbitmq-server:5672"
+      RABBITMQ_EXCHANGE: "microservices"
+      RABBITMQ_QUEUE: "auth_queue"
+      
+      # Otros
+      TZ: America/Lima
+      GO_ENV: production
+      LOG_LEVEL: info
+
     volumes:
-      - ./logs:/app/logs
-      - ./config:/app/config
-      - ./static:/app/static
+      - auth_logs:/app/logs
+      - ./config:/app/config:ro
+      - ./static:/app/static:ro
+
     ports:
       - "3007:3007"
+
     networks:
       - elastika-network
-    # Configuración de recursos moderada
+
     deploy:
       resources:
         limits:
           cpus: '0.5'
-          memory: 256M
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3007/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
