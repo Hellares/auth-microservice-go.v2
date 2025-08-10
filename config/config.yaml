@@ -44,6 +44,6 @@ site:
 
 # Configuración RabbitMQ (para comunicación entre microservicios)
 rabbitmq:
-  url: "amqp://admin:admin123@86.48.26.221:5672"
+  url: "amqp://admin:admin123@rabbitmq-server:5672"
   exchange: "microservices"
   queue: "auth_queue"
