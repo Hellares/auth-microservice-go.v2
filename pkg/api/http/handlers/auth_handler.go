@@ -313,13 +313,13 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		fechaNacimiento = time.Time{}
 	}
 
-	// Generar nombres completos automáticamente si no se proporciona
-	if req.NombresCompletos == "" {
-		req.NombresCompletos = req.Nombres + " " + req.ApellidoPaterno
-		if req.ApellidoMaterno != "" {
-			req.NombresCompletos += " " + req.ApellidoMaterno
-		}
-	}
+	// // Generar nombres completos automáticamente si no se proporciona
+	// if req.NombresCompletos == "" {
+	// 	req.NombresCompletos = req.Nombres + " " + req.ApellidoPaterno
+	// 	if req.ApellidoMaterno != "" {
+	// 		req.NombresCompletos += " " + req.ApellidoMaterno
+	// 	}
+	// }
 
 	// Llamar al servicio de autenticación con todos los parámetros
 	var user *entities.User

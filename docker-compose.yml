@@ -1,0 +1,34 @@
+
+version: '3.8'
+
+networks:
+  elastika-network:
+    external: true
+
+services:
+  auth-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: auth-microservice:1.0.0
+    container_name: auth-microservice
+    restart: unless-stopped
+    volumes:
+      - ./logs:/app/logs
+      - ./config:/app/config
+      - ./static:/app/static
+    ports:
+      - "3007:3007"
+    networks:
+      - elastika-network
+    # Configuración de recursos moderada
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
