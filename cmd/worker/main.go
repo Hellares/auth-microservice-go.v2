@@ -97,8 +97,22 @@ func main() {
 	log.Println("🎉 Worker iniciado correctamente, procesando eventos...")
 
 	// Esperar señal de terminación
-	<-shutdownChan
-	log.Println("🛑 Señal de terminación recibida, iniciando shutdown graceful...")
+	// <-shutdownChan
+	// log.Println("🛑 Señal de terminación recibida, iniciando shutdown graceful...")
+
+		// Mantener el worker corriendo
+	for {
+	    select {
+	    case <-shutdownChan:
+	        log.Println("🛑 Señal de terminación recibida...")
+	        goto shutdown
+	    case <-time.After(1 * time.Minute):
+	        logWorkerStats() // Log periódico
+	    }
+	}
+
+shutdown:
+log.Println("🛑 Iniciando shutdown graceful...")
 
 	// Coordinar shutdown graceful
 	performGracefulShutdown()
@@ -140,84 +154,118 @@ func setupSignalHandling() {
 // ============================================================================
 
 // startEventWorker inicia el worker para procesar eventos de RabbitMQ
+// func startEventWorker(authService services.AuthService) rabbitmq.EventBus {
+// 	log.Println("🔌 Conectando a RabbitMQ...")
+
+// 	// Conectar a RabbitMQ con reintentos
+// 	eventBus, err := connectRabbitMQWithRetry()
+// 	if err != nil {
+// 		log.Fatalf("❌ Error crítico conectando a RabbitMQ: %v", err)
+// 	}
+
+// 	// Inicializar manejadores de eventos
+// 	eventHandler := msgHandlers.NewEventHandler(authService)
+
+// 	// Registrar todos los handlers
+// 	if err := msgHandlers.RegisterEventHandlers(eventBus, eventHandler); err != nil {
+// 		log.Fatalf("❌ Error registrando manejadores de eventos: %v", err)
+// 	}
+
+// 	log.Println("✅ Worker de eventos RabbitMQ iniciado correctamente")
+
+// 	// Monitorear estado de conexión en goroutine separada
+// 	wg.Add(1)
+// 	go monitorRabbitMQConnection(eventBus)
+
+// 	return eventBus
+// }
+
 func startEventWorker(authService services.AuthService) rabbitmq.EventBus {
 	log.Println("🔌 Conectando a RabbitMQ...")
 
-	// Conectar a RabbitMQ con reintentos
-	eventBus, err := connectRabbitMQWithRetry()
+	// Crear conexión directa sin función auxiliar
+	rabbitURL := viper.GetString("rabbitmq.url")
+	exchangeName := viper.GetString("rabbitmq.exchange")
+	queueName := viper.GetString("rabbitmq.queue")
+	
+	log.Printf("🔧 Configuración: URL=%s, Exchange=%s, Queue=%s", rabbitURL, exchangeName, queueName)
+
+	eventBus, err := rabbitmq.NewRabbitMQEventBus(rabbitURL, exchangeName, queueName)
 	if err != nil {
-		log.Fatalf("❌ Error crítico conectando a RabbitMQ: %v", err)
+		log.Fatalf("❌ Error conectando a RabbitMQ: %v", err)
 	}
+
+	log.Println("✅ EventBus creado exitosamente")
 
 	// Inicializar manejadores de eventos
+	log.Println("🔧 Creando EventHandler...")
 	eventHandler := msgHandlers.NewEventHandler(authService)
+	log.Println("✅ EventHandler creado")
 
-	// Registrar todos los handlers
+	// Registrar handlers
+	log.Println("📝 Registrando event handlers...")
 	if err := msgHandlers.RegisterEventHandlers(eventBus, eventHandler); err != nil {
-		log.Fatalf("❌ Error registrando manejadores de eventos: %v", err)
+		log.Fatalf("❌ Error registrando handlers: %v", err)
 	}
+	log.Println("✅ Event handlers registrados exitosamente")
 
 	log.Println("✅ Worker de eventos RabbitMQ iniciado correctamente")
-
-	// Monitorear estado de conexión en goroutine separada
-	wg.Add(1)
-	go monitorRabbitMQConnection(eventBus)
-
 	return eventBus
 }
 
 // connectRabbitMQWithRetry conecta a RabbitMQ con estrategia de reintentos
-func connectRabbitMQWithRetry() (rabbitmq.EventBus, error) {
-	maxRetries := 5
-	baseDelay := 2 * time.Second
+// func connectRabbitMQWithRetry() (rabbitmq.EventBus, error) {
+// 	maxRetries := 5
+// 	baseDelay := 2 * time.Second
 
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		log.Printf("🔄 Intento de conexión a RabbitMQ: %d/%d", attempt, maxRetries)
+// 	for attempt := 1; attempt <= maxRetries; attempt++ {
+// 		log.Printf("🔄 Intento de conexión a RabbitMQ: %d/%d", attempt, maxRetries)
 
-		eventBus, err := rabbitmq.NewRabbitMQEventBus(
-			viper.GetString("rabbitmq.url"),
-			viper.GetString("rabbitmq.exchange"),
-			viper.GetString("rabbitmq.queue"),
-		)
+// 		eventBus, err := rabbitmq.NewRabbitMQEventBus(
+// 			viper.GetString("rabbitmq.url"),
+// 			viper.GetString("rabbitmq.exchange"),
+// 			viper.GetString("rabbitmq.queue"),
+// 		)
 
-		if err == nil {
-			log.Println("✅ Conexión a RabbitMQ establecida exitosamente")
-			return eventBus, nil // eventBus ya implementa EventBus correctamente
-		}
+// 		if err == nil {
+// 			log.Println("✅ Conexión a RabbitMQ establecida exitosamente")
+// 			log.Println("🎯 DEBUG: Retornando EventBus...")
+// 			return eventBus, nil // eventBus ya implementa EventBus correctamente
+// 		}
 
-		log.Printf("⚠️  Intento %d falló: %v", attempt, err)
+// 		log.Printf("⚠️  Intento %d falló: %v", attempt, err)
 
-		if attempt < maxRetries {
-			delay := time.Duration(attempt) * baseDelay
-			log.Printf("⏳ Esperando %v antes del siguiente intento...", delay)
-			time.Sleep(delay)
-		}
-	}
+// 		if attempt < maxRetries {
+// 			delay := time.Duration(attempt) * baseDelay
+// 			log.Printf("⏳ Esperando %v antes del siguiente intento...", delay)
+// 			time.Sleep(delay)
+// 		}
+// 	}
 
-	return nil, fmt.Errorf("no se pudo conectar a RabbitMQ después de %d intentos", maxRetries)
-}
+// 	return nil, fmt.Errorf("no se pudo conectar a RabbitMQ después de %d intentos", maxRetries)
+// }
 
 // monitorRabbitMQConnection monitorea el estado de la conexión RabbitMQ
-func monitorRabbitMQConnection(eventBus rabbitmq.EventBus) {
-	defer wg.Done()
+// func monitorRabbitMQConnection(eventBus rabbitmq.EventBus) {
+// 	defer wg.Done()
 
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
+// 	ticker := time.NewTicker(30 * time.Second)
+// 	defer ticker.Stop()
 
-	for {
-		select {
-		case <-ticker.C:
-			if !eventBus.IsConnected() {
-				log.Println("⚠️  RabbitMQ desconectado, el EventBus manejará la reconexión automáticamente")
-			} else {
-				log.Println("✅ RabbitMQ conexión saludable")
-			}
-		case <-shutdownChan:
-			log.Println("🛑 Deteniendo monitor de RabbitMQ...")
-			return
-		}
-	}
-}
+// 	for {
+// 		select {
+// 		case <-ticker.C:
+// 			if !eventBus.IsConnected() {
+// 				log.Println("⚠️  RabbitMQ desconectado, el EventBus manejará la reconexión automáticamente")
+// 			} else {
+// 				log.Println("✅ RabbitMQ conexión saludable")
+// 			}
+// 		case <-shutdownChan:
+// 			log.Println("🛑 Deteniendo monitor de RabbitMQ...")
+// 			return
+// 		}
+// 	}
+// }
 
 // ============================================================================
 // TAREAS PERIÓDICAS DE LIMPIEZA

@@ -4,7 +4,7 @@ database:
   port: "5432"
   user: "postgres"
   password: "jtorres159."
-  name: "auth_v2"
+  name: "auth_v2_dev"
   max_open_conns: 25
   max_idle_conns: 25
   conn_max_lifetime: "15m"
@@ -44,6 +44,6 @@ site:
 
 # Configuración RabbitMQ (para comunicación entre microservicios)
 rabbitmq:
-  url: "amqp://admin:admin123@rabbitmq-server:5672"
+  url: "amqp://devuser:devpass@86.48.26.221:5673"
   exchange: "microservices"
   queue: "auth_queue"

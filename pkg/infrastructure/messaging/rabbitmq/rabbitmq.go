@@ -225,32 +225,69 @@ type RabbitMQEventBus struct {
 
 // NewRabbitMQEventBus crea una nueva instancia del EventBus
 // Establece la conexión inicial y configura el exchange y queue
+// func NewRabbitMQEventBus(url, exchangeName, queueName string) (*RabbitMQEventBus, error) {
+// 	config := ConnectionConfig{
+// 		URL:          url,
+// 		ExchangeName: exchangeName,
+// 		QueueName:    queueName,
+// 		Durable:      true,  // Sobrevive a reinicios del servidor
+// 		AutoDelete:   false, // No se elimina automáticamente
+// 		Exclusive:    false, // Puede ser usada por múltiples consumidores
+// 		NoWait:       false, // Esperar confirmación del servidor
+// 	}
+
+// 	eventBus := &RabbitMQEventBus{
+// 		config:      config,
+// 		subscribers: make(map[string]MessageHandler),
+// 		done:        make(chan bool),
+// 	}
+
+// 	// Establecer conexión inicial
+// 	if err := eventBus.connect(); err != nil {
+// 		return nil, fmt.Errorf("error al conectar a RabbitMQ: %v", err)
+// 	}
+
+// 	// Iniciar goroutine para monitorear reconexiones
+// 	go eventBus.handleReconnection()
+
+// 	log.Printf("RabbitMQ EventBus inicializado correctamente")
+// 	return eventBus, nil
+// }
+
 func NewRabbitMQEventBus(url, exchangeName, queueName string) (*RabbitMQEventBus, error) {
+	log.Printf("🔧 NewRabbitMQEventBus iniciado: url=%s, exchange=%s, queue=%s", url, exchangeName, queueName)
+	
 	config := ConnectionConfig{
 		URL:          url,
 		ExchangeName: exchangeName,
 		QueueName:    queueName,
-		Durable:      true,  // Sobrevive a reinicios del servidor
-		AutoDelete:   false, // No se elimina automáticamente
-		Exclusive:    false, // Puede ser usada por múltiples consumidores
-		NoWait:       false, // Esperar confirmación del servidor
+		Durable:      true,
+		AutoDelete:   false,
+		Exclusive:    false,
+		NoWait:       false,
 	}
 
+	log.Println("🔧 Config creado, creando EventBus...")
+	
 	eventBus := &RabbitMQEventBus{
 		config:      config,
 		subscribers: make(map[string]MessageHandler),
 		done:        make(chan bool),
 	}
 
+	log.Println("🔧 EventBus struct creado, llamando connect()...")
+	
 	// Establecer conexión inicial
 	if err := eventBus.connect(); err != nil {
 		return nil, fmt.Errorf("error al conectar a RabbitMQ: %v", err)
 	}
 
+	log.Println("🔧 connect() exitoso, iniciando goroutine...")
+	
 	// Iniciar goroutine para monitorear reconexiones
 	go eventBus.handleReconnection()
 
-	log.Printf("RabbitMQ EventBus inicializado correctamente")
+	log.Printf("✅ RabbitMQ EventBus inicializado correctamente")
 	return eventBus, nil
 }
 
@@ -331,7 +368,17 @@ func (eb *RabbitMQEventBus) connect() error {
 	log.Printf("Conexión a RabbitMQ establecida exitosamente")
 
 	// Reconfigurar suscripciones después de reconectar
-	eb.resubscribeAll()
+	// eb.resubscribeAll()
+
+	// return nil
+
+	eb.reconnecting = false
+	log.Printf("Conexión a RabbitMQ establecida exitosamente")
+
+	log.Println("🔧 DEBUG: Antes de resubscribeAll...")  // ⬅️ AGREGAR
+	// Reconfigurar suscripciones después de reconectar
+	// eb.resubscribeAll()
+	log.Println("🔧 DEBUG: Después de resubscribeAll...")  // ⬅️ AGREGAR
 
 	return nil
 }
@@ -390,15 +437,31 @@ func (eb *RabbitMQEventBus) reconnect() {
 }
 
 // resubscribeAll reconfigura todas las suscripciones después de reconectar
+// func (eb *RabbitMQEventBus) resubscribeAll() {
+// 	eb.mutex.RLock()
+// 	defer eb.mutex.RUnlock()
+
+// 	for routingKey, handler := range eb.subscribers {
+// 		if err := eb.subscribeInternal(routingKey, handler); err != nil {
+// 			log.Printf("Error al resuscribirse a %s: %v", routingKey, err)
+// 		}
+// 	}
+// }
+
 func (eb *RabbitMQEventBus) resubscribeAll() {
+	log.Println("🔧 DEBUG: Iniciando resubscribeAll...")  // ⬅️ AGREGAR
 	eb.mutex.RLock()
 	defer eb.mutex.RUnlock()
 
+	log.Printf("🔧 DEBUG: Hay %d suscriptores", len(eb.subscribers))  // ⬅️ AGREGAR
+	
 	for routingKey, handler := range eb.subscribers {
+		log.Printf("🔧 DEBUG: Resuscribiendo %s...", routingKey)  // ⬅️ AGREGAR
 		if err := eb.subscribeInternal(routingKey, handler); err != nil {
 			log.Printf("Error al resuscribirse a %s: %v", routingKey, err)
 		}
 	}
+	log.Println("🔧 DEBUG: resubscribeAll completado")  // ⬅️ AGREGAR
 }
 
 // ============================================================================
