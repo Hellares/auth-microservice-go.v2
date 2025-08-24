@@ -59,6 +59,10 @@ type AuthService interface {
 
 	GetUserEmpresasWithRoles(ctx context.Context, userID uuid.UUID) ([]EmpresaWithRole, error)
 	ListUsersInEmpresa(ctx context.Context, empresaID uuid.UUID, page, limit int, filters map[string]string) ([]*UserInfo, int, error)
+
+
+
+	GetUserEmpresasWithRolesOptimized(ctx context.Context, userID uuid.UUID) ([]*entities.EmpresaConRol, error)
 }
 
 // Estructuras auxiliares para respuestas

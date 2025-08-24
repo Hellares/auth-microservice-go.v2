@@ -35,4 +35,6 @@ type UserEmpresaRoleRepository interface {
 	
 	// GetActiveRolesInEmpresa obtiene roles activos de un usuario en una empresa
 	// GetActiveRolesInEmpresa(ctx context.Context, userID, empresaID uuid.UUID) ([]uuid.UUID, error)
+
+	FindEmpresasWithRolesByUserIDOptimized(ctx context.Context, userID uuid.UUID) ([]*entities.EmpresaConRol, error)
 }

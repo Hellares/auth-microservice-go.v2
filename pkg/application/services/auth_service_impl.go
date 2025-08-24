@@ -174,71 +174,6 @@ func (s *authServiceImpl) Login(ctx context.Context, dni, password string) (stri
 	return token, nil
 }
 
-// VerifyToken verifica un token JWT y devuelve los claims
-// func (s *authServiceImpl) VerifyToken(ctx context.Context, tokenString string) (*auth.TokenClaims, error) {
-// 	// Verificar si el token existe en la base de datos
-// 	session, err := s.sessionRepo.FindByToken(ctx, tokenString)
-// 	if err != nil || session == nil || time.Now().After(session.ExpiresAt) {
-// 		return nil, errors.New("token inválido o expirado")
-// 	}
-
-// 	// Primero intentar validar como token básico
-// 	claims, err := s.jwtService.ValidateToken(tokenString)
-// 	if err == nil {
-// 		return claims, nil
-// 	}
-
-// 	// Si falla, intentar como token con empresa y convertir a TokenClaims básico
-// 	claimsWithEmpresa, err := s.jwtService.ValidateTokenWithEmpresa(tokenString)
-// 	if err != nil {
-// 		return nil, errors.New("token inválido")
-// 	}
-
-// 	// Convertir TokenClaimsWithEmpresa a TokenClaims para mantener compatibilidad
-// 	return &auth.TokenClaims{
-// 		UserID: claimsWithEmpresa.UserID,
-// 		DNI:    claimsWithEmpresa.DNI,
-// 		Email:  claimsWithEmpresa.Email,
-// 		RegisteredClaims: claimsWithEmpresa.RegisteredClaims,
-// 	}, nil
-// }
-
-// func (s *authServiceImpl) VerifyToken(ctx context.Context, tokenString string) (*auth.TokenClaims, error) {
-//     // Verificar si el token existe en la base de datos
-//     session, err := s.sessionRepo.FindByToken(ctx, tokenString)
-//     if err != nil || session == nil || time.Now().After(session.ExpiresAt) {
-//         return nil, errors.New("token inválido o expirado")
-//     }
-
-//     // Primero intentar validar como token básico
-//     claims, err := s.jwtService.ValidateToken(tokenString)
-//     if err == nil {
-//         return claims, nil
-//     }
-
-//     // Si falla, intentar como token con empresa
-//     claimsWithEmpresa, err := s.jwtService.ValidateTokenWithEmpresa(tokenString)
-//     if err != nil {
-//         return nil, errors.New("token inválido")
-//     }
-
-//     // Devolver claims con EmpresaID si existe
-//     return &auth.TokenClaims{
-//         UserID:    claimsWithEmpresa.UserID,
-//         DNI:       claimsWithEmpresa.DNI,
-//         Email:     claimsWithEmpresa.Email,
-//         EmpresaID: claimsWithEmpresa.EmpresaID, // Incluir EmpresaID
-//         RegisteredClaims: jwt.RegisteredClaims{
-//             ExpiresAt: claimsWithEmpresa.ExpiresAt,
-//             IssuedAt:  claimsWithEmpresa.IssuedAt,
-//             NotBefore: claimsWithEmpresa.NotBefore,
-//             Issuer:    claimsWithEmpresa.Issuer,
-//             Subject:   claimsWithEmpresa.Subject,
-//             ID:        claimsWithEmpresa.ID,
-//             Audience:  claimsWithEmpresa.Audience,
-//         },
-//     }, nil
-// }
 
 func (s *authServiceImpl) VerifyToken(ctx context.Context, tokenString string) (*auth.TokenClaims, error) {
     // Verificar si el token existe en la base de datos
@@ -326,35 +261,6 @@ func (s *authServiceImpl) RequestPasswordReset(ctx context.Context, email string
 	return token, nil
 }
 
-// // ResetPassword resetea la contraseña de un usuario usando un token
-// func (s *authServiceImpl) ResetPassword(ctx context.Context, token, newPassword string) error {
-// 	verificationToken, err := s.verificationTokenRepo.FindByToken(ctx, token)
-// 	if err != nil {
-// 		return errors.New("token inválido")
-// 	}
-
-// 	if verificationToken.Type != entities.TokenTypePasswordReset {
-// 		return errors.New("tipo de token incorrecto")
-// 	}
-
-// 	if time.Now().After(verificationToken.ExpiresAt) {
-// 		return errors.New("token expirado")
-// 	}
-
-// 	// Hash de la nueva contraseña
-// 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	// Actualizar contraseña
-// 	if err := s.userRepo.UpdatePassword(ctx, verificationToken.UserID, string(hashedPassword), nil); err != nil {
-//     return err
-// }
-
-// 	// Eliminar token usado
-// 	return s.verificationTokenRepo.Delete(ctx, verificationToken.ID)
-// }
 
 // ResetPassword - Versión con transacción (más segura)
 func (s *authServiceImpl) ResetPassword(ctx context.Context, token, newPassword string) error {
@@ -467,59 +373,6 @@ func (s *authServiceImpl) GetUserRoles(ctx context.Context, userID, empresaID uu
 	return s.roleRepo.FindByUserAndEmpresa(ctx, userID, empresaID)
 }
 
-// // HasPermission verifica si un usuario tiene un permiso específico en una empresa
-// func (s *authServiceImpl) HasPermission(ctx context.Context, userID, empresaID uuid.UUID, permissionName string) (bool, error) {
-// 	// Primero, verificar si es un rol de sistema
-// 	if permissionName == "SUPER_ADMIN" || permissionName == "SYSTEM_ADMIN" {
-// 		return s.HasSystemRole(ctx, userID, permissionName)
-// 	}
-	
-// 	// Para permisos de empresa, continuar con la lógica existente
-// 	if empresaID == uuid.Nil {
-// 		// Si no hay empresa especificada y no es un rol de sistema, no tiene permiso
-// 		return false, nil
-// 	}
-
-// 	// Log para debugging
-// 	log.Printf("Verificando permiso %s para usuario %s en empresa %s", permissionName, userID, empresaID)
-	
-// 	// Obtener los roles del usuario en la empresa
-// 	roles, err := s.GetUserRoles(ctx, userID, empresaID)
-// 	if err != nil {
-// 		log.Printf("Error obteniendo roles: %v", err)
-// 		return false, err
-// 	}
-
-// 	log.Printf("Usuario tiene %d roles en la empresa", len(roles))
-	
-// 	// Para cada rol, verificar si tiene el permiso
-// 	for _, role := range roles {
-// 		log.Printf("Verificando rol: %s", role.Name)
-
-// 		// Si estamos buscando un permiso que es igual al nombre del rol
-// 		if role.Name == permissionName {
-// 			log.Printf("Usuario tiene el rol %s", permissionName)
-// 			return true, nil
-// 		}
-		
-// 		// Obtener permisos del rol
-// 		permissions, err := s.permissionRepo.FindByRole(ctx, role.ID)
-// 		if err != nil {
-// 			log.Printf("Error obteniendo permisos del rol %s: %v", role.Name, err)
-// 			continue
-// 		}
-
-// 		for _, permission := range permissions {
-// 			if permission.Name == permissionName {
-// 				log.Printf("Usuario tiene el permiso %s a través del rol %s", permissionName, role.Name)
-// 				return true, nil
-// 			}
-// 		}
-// 	}
-
-// 	log.Printf("Usuario no tiene el permiso %s", permissionName)
-// 	return false, nil
-// }
 
 // HasPermission verifica si un usuario tiene un permiso específico en una empresa
 func (s *authServiceImpl) HasPermission(ctx context.Context, userID, empresaID uuid.UUID, permissionName string) (bool, error) {
@@ -680,51 +533,6 @@ func (s *authServiceImpl) GetUserEmpresas(ctx context.Context, userID uuid.UUID)
 	// Obtener las empresas asociadas al usuario
 	return s.userEmpresaRoleRepo.FindEmpresasByUserID(ctx, userID)
 }
-
-// LoginMultiempresa autentica un usuario y retorna datos para múltiples empresas
-// func (s *authServiceImpl) LoginMultiempresa(ctx context.Context, dni, password string) (*entities.User, string, error) {
-// 	// Buscar usuario por DNI
-// 	user, err := s.userRepo.FindByDNI(ctx, dni)
-// 	if err != nil {
-// 		return nil, "", errors.New("credenciales inválidas")
-// 	}
-
-// 	// Verificar contraseña
-// 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
-// 		return nil, "", errors.New("credenciales inválidas")
-// 	}
-
-// 	// Crear token básico (sin empresa específica)
-// 	claims := &auth.TokenClaims{
-// 		UserID: user.ID.String(),
-// 		DNI:    user.DNI,
-// 		Email:  user.Email,
-// 		RegisteredClaims: jwt.RegisteredClaims{
-// 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.tokenExpiration)),
-// 		},
-// 	}
-
-// 	token, err := s.jwtService.GenerateToken(claims)
-// 	if err != nil {
-// 		return nil, "", fmt.Errorf("error al generar el token: %v", err)
-// 	}
-
-// 	// Crear sesión
-// 	session := &entities.Session{
-// 		ID:        uuid.New(),
-// 		UserID:    user.ID,
-// 		Token:     token,
-// 		ExpiresAt: time.Now().Add(s.tokenExpiration),
-// 		CreatedAt: time.Now(),
-// 		UpdatedAt: time.Now(),
-// 	}
-
-// 	if err := s.sessionRepo.Create(ctx, session); err != nil {
-// 		return nil, "", fmt.Errorf("error al crear la sesión: %v", err)
-// 	}
-
-// 	return user, token, nil
-// }
 
 func (s *authServiceImpl) LoginMultiempresa(ctx context.Context, dni, password string) (*entities.User, string, error) {
     // Buscar usuario por DNI
@@ -1003,49 +811,6 @@ func isPriorityRole(roleName string) bool {
 	return false
 }
 
-// // GetUserEmpresasWithRoles obtiene empresas del usuario con roles y permisos
-// func (s *authServiceImpl) GetUserEmpresasWithRoles(ctx context.Context, userID uuid.UUID) ([]EmpresaWithRole, error) {
-// 	// Obtener todas las empresas del usuario
-// 	empresaIDs, err := s.userEmpresaRoleRepo.FindEmpresasByUserID(ctx, userID)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	var empresasWithRoles []EmpresaWithRole
-
-// 	for _, empresaID := range empresaIDs {
-// 		// Obtener roles del usuario en esta empresa
-// 		roles, err := s.GetUserRoles(ctx, userID, empresaID)
-// 		if err != nil {
-// 			log.Printf("Error obteniendo roles para empresa %s: %v", empresaID, err)
-// 			continue
-// 		}
-
-// 		// Determinar el rol principal (el de mayor jerarquía)
-// 		principalRole := determinePrincipalRole(roles)
-
-// 		// Obtener permisos
-// 		var allPermissions []string
-// 		for _, role := range roles {
-// 			permissions, err := s.GetPermissionsByRole(ctx, role.ID)
-// 			if err != nil {
-// 				continue
-// 			}
-// 			for _, perm := range permissions {
-// 				allPermissions = append(allPermissions, perm.Name)
-// 			}
-// 		}
-
-// 		empresasWithRoles = append(empresasWithRoles, EmpresaWithRole{
-// 			ID:          empresaID,
-// 			Name:        "", // Esto se completará con llamada al microservicio de empresa
-// 			Role:        principalRole,
-// 			Permissions: uniqueStrings(allPermissions),
-// 		})
-// 	}
-
-// 	return empresasWithRoles, nil
-// }
 
 //TODO: GetUserEmpresasWithRoles obtiene empresas del usuario con roles y permisos
 func (s *authServiceImpl) GetUserEmpresasWithRoles(ctx context.Context, userID uuid.UUID) ([]EmpresaWithRole, error) {
@@ -1299,4 +1064,17 @@ func (s *authServiceImpl) LoginMultiempresaWithHelper(ctx context.Context, dni, 
     }
 
     return user, token, nil
+}
+
+func (s *authServiceImpl) GetUserEmpresasWithRolesOptimized(ctx context.Context, userID uuid.UUID) ([]*entities.EmpresaConRol, error) {
+    log.Printf("Obteniendo empresas optimizadas para usuario: %s", userID)
+    
+    // Delegar al repository optimizado
+    empresas, err := s.userEmpresaRoleRepo.FindEmpresasWithRolesByUserIDOptimized(ctx, userID)
+    if err != nil {
+        return nil, fmt.Errorf("error obteniendo empresas optimizadas: %v", err)
+    }
+    
+    log.Printf("Empresas optimizadas obtenidas: %d", len(empresas))
+    return empresas, nil
 }

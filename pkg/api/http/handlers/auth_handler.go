@@ -88,11 +88,16 @@ func (h *AuthHandler) RegisterRoutes(router *mux.Router) {
 	// ==================== RUTAS MULTI-EMPRESA ====================
 	router.HandleFunc("/select-empresa", h.SelectEmpresa).Methods("POST")
 	router.HandleFunc("/switch-empresa", h.SelectEmpresa).Methods("POST") // Alias
+	router.HandleFunc("/users/me/empresas-optimized", h.GetCurrentUserEmpresasOptimized).Methods("GET")
 	router.HandleFunc("/users/me/empresas", h.GetCurrentUserEmpresas).Methods("GET")
 	router.HandleFunc("/users/{id}/empresas", h.GetUserEmpresas).Methods("GET")
 	router.HandleFunc("/users/{id}/empresas/{empresaId}/add-as-client", h.AddClientToEmpresa).Methods("POST")
 	router.HandleFunc("/users/empresa/{empresaId}", h.GetUsersByEmpresa).Methods("GET")
 	router.HandleFunc("/empresa/{empresaId}/all-users", h.ListAllUsersInEmpresa).Methods("GET")
+
+
+	//!nueva para empresa con rol
+	
 
 	// ==================== RUTAS INTERNAS (MICROSERVICIOS) ====================
 	internalRouter := router.PathPrefix("/internal").Subrouter()
@@ -1770,4 +1775,45 @@ func (h *AuthHandler) GetUserEmpresasInternal(w http.ResponseWriter, r *http.Req
 		Success: true,
 		Data:    empresas,
 	})
+}
+
+func (h *AuthHandler) GetCurrentUserEmpresasOptimized(w http.ResponseWriter, r *http.Request) {
+    // Verificar autenticación
+    token := extractToken(r)
+    if token == "" {
+        respondWithError(w, http.StatusUnauthorized, "No autorizado")
+        return
+    }
+
+    // Verificar token y obtener claims
+    claims, err := h.authService.VerifyToken(r.Context(), token)
+    if err != nil {
+        respondWithError(w, http.StatusUnauthorized, err.Error())
+        return
+    }
+
+    // Obtener ID del usuario del token
+    userID, err := uuid.Parse(claims.UserID)
+    if err != nil {
+        respondWithError(w, http.StatusInternalServerError, "Error en el token")
+        return
+    }
+
+    log.Printf("Solicitando empresas optimizadas para usuario: %s", userID)
+
+    // ✅ USAR MÉTODO OPTIMIZADO DEL SERVICE
+    empresasConRoles, err := h.authService.GetUserEmpresasWithRolesOptimized(r.Context(), userID)
+    if err != nil {
+        log.Printf("Error en consulta optimizada: %v", err)
+        respondWithError(w, http.StatusInternalServerError, err.Error())
+        return
+    }
+
+    log.Printf("Empresas optimizadas obtenidas: %d", len(empresasConRoles))
+
+    // Responder con empresas y roles
+    respondWithJSON(w, http.StatusOK, Response{
+        Success: true,
+        Data:    empresasConRoles,
+    })
 }

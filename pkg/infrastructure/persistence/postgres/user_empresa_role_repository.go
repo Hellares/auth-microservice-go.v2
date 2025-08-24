@@ -5,10 +5,13 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 
 	"auth-microservice-go.v2/pkg/domain/entities"
 )
@@ -441,3 +444,48 @@ func (r *userEmpresaRoleRepository) FindPermissionsByUserAndEmpresa(ctx context.
     return permissions, nil
 }
 
+
+func (r *userEmpresaRoleRepository) FindEmpresasWithRolesByUserIDOptimized(ctx context.Context, userID uuid.UUID) ([]*entities.EmpresaConRol, error) {
+    query := `
+        SELECT 
+            uer.empresa_id,
+            ARRAY_AGG(r.name ORDER BY r.name) as roles
+        FROM user_empresa_roles uer
+        INNER JOIN roles r ON uer.role_id = r.id
+        WHERE uer.user_id = $1 
+          AND uer.active = true
+        GROUP BY uer.empresa_id
+        ORDER BY MAX(uer.created_at) DESC
+    `
+
+    log.Printf("Ejecutando consulta optimizada para usuario: %s", userID)
+
+    rows, err := r.db.QueryContext(ctx, query, userID)
+    if err != nil {
+        return nil, fmt.Errorf("error ejecutando consulta optimizada: %v", err)
+    }
+    defer rows.Close()
+
+    var empresas []*entities.EmpresaConRol
+    for rows.Next() {
+        var empresaID uuid.UUID
+        var roles pq.StringArray  // ✅ ARRAY_AGG de PostgreSQL
+
+        if err := rows.Scan(&empresaID, &roles); err != nil {
+            log.Printf("Error scanning row: %v", err)
+            continue
+        }
+
+        empresas = append(empresas, &entities.EmpresaConRol{
+            EmpresaID: empresaID,
+            Roles:     []string(roles), // Convertir a slice normal
+        })
+    }
+
+    if err := rows.Err(); err != nil {
+        return nil, fmt.Errorf("error iterando rows: %v", err)
+    }
+
+    log.Printf("Consulta optimizada completada: %d empresas encontradas", len(empresas))
+    return empresas, nil
+}
