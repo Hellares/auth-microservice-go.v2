@@ -830,6 +830,12 @@ func (s *authServiceImpl) GetUserEmpresasWithRoles(ctx context.Context, userID u
             continue
         }
 
+		// ✅ NUEVO: Extraer nombres de TODOS los roles
+        var roleNames []string
+        for _, role := range roles {
+            roleNames = append(roleNames, role.Name)
+        }
+
         // Determinar el rol principal (el de mayor jerarquía)
         principalRole := determinePrincipalRole(roles)
 
@@ -856,7 +862,8 @@ func (s *authServiceImpl) GetUserEmpresasWithRoles(ctx context.Context, userID u
         empresasWithRoles = append(empresasWithRoles, EmpresaWithRole{
             ID:          empresaID,
             Name:        empresaName,
-            Role:        principalRole,
+            Roles:        roleNames,
+			PrincipalRole: principalRole,
             Permissions: uniqueStrings(allPermissions),
         })
     }
@@ -968,7 +975,7 @@ func (s *authServiceImpl) ListUsersInEmpresa(ctx context.Context, empresaID uuid
 			Verified:         user.Verified,
 			CreatedAt:        user.CreatedAt,
 			UpdatedAt:        user.UpdatedAt,
-			Roles:            roleInfos,
+			// Roles:            roleInfos,
 		}
 	}
 

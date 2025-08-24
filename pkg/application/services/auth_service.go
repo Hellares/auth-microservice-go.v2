@@ -99,7 +99,7 @@ type UserInfo struct {
 	CreatedAt         time.Time           `json:"createdAt"`
 	UpdatedAt         time.Time           `json:"updatedAt"`
 	Empresas          []EmpresaInfo       `json:"empresas,omitempty"`
-	Roles             []RoleSimple        `json:"roles,omitempty"`
+	// Roles             []RoleSimple        `json:"roles,omitempty"`
 }
 
 // RoleSimple información básica de rol
@@ -119,6 +119,16 @@ type EmpresaInfo struct {
 type EmpresaWithRole struct {
 	ID          uuid.UUID `json:"id"`
 	Name        string    `json:"name"`
-	Role        string    `json:"role"`
+	Roles       []string  `json:"roles"`
+	PrincipalRole string  `json:"principalRole"`
 	Permissions []string  `json:"permissions"`
+}
+
+type EmpresaWithRoleResponse struct {
+	ID            uuid.UUID `json:"id"`
+	Name          string    `json:"name"`
+	Role          string    `json:"role"`          // ✅ Para compatibilidad (rol principal)
+	Roles         []string  `json:"roles"`         // ✅ Todos los roles
+	PrincipalRole string    `json:"principalRole"` // ✅ Rol principal explícito
+	Permissions   []string  `json:"permissions"`
 }
