@@ -358,7 +358,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 }
 
 // Login maneja el inicio de sesión multi-empresa
-// Retorna información completa para que el cliente decida qué hacer
+// ! IMPLEMENTADO Login Retorna información completa para que el cliente decida qué hacer
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	// Estructura simple para login (solo DNI y contraseña)
 	var req struct {
