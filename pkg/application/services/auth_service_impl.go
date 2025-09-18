@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
@@ -190,6 +191,54 @@ func (s *authServiceImpl) VerifyToken(ctx context.Context, tokenString string) (
 
     return claims, nil
 }
+
+
+//! Implementado Logout invalida la sesión actual del usuario
+func (s *authServiceImpl) Logout(ctx context.Context, token string) error {
+    // Validar token JWT
+    claims, err := s.jwtService.ValidateToken(token)
+    if err != nil {
+        return fmt.Errorf("token inválido: %v", err)
+    }
+
+    // Parsear userID
+    userID, err := uuid.Parse(claims.UserID)
+    if err != nil {
+        return fmt.Errorf("ID de usuario inválido en token: %v", err)
+    }
+
+    // Buscar sesión por token
+    session, err := s.sessionRepo.FindByToken(ctx, token)
+    if err != nil {
+        if strings.Contains(err.Error(), "no encontrada") {
+            return fmt.Errorf("sesión no encontrada")
+        }
+        return fmt.Errorf("error al buscar sesión: %v", err)
+    }
+
+    // Verificar propiedad de la sesión
+    if session.UserID != userID {
+        return fmt.Errorf("sesión no pertenece al usuario")
+    }
+
+    // Eliminar sesión
+    if err := s.sessionRepo.DeleteByToken(ctx, token); err != nil {
+        return fmt.Errorf("error al cerrar sesión: %v", err)
+    }
+
+    return nil
+}
+
+// LogoutAllSessions cierra todas las sesiones del usuario
+func (s *authServiceImpl) LogoutAllSessions(ctx context.Context, userID uuid.UUID) error {
+    if err := s.sessionRepo.DeleteAllByUserID(ctx, userID); err != nil {
+        return fmt.Errorf("error al cerrar todas las sesiones: %v", err)
+    }
+    
+    return nil
+}
+
+
 
 // GetUserByID obtiene un usuario por su ID
 func (s *authServiceImpl) GetUserByID(ctx context.Context, id uuid.UUID) (*entities.User, error) {
@@ -1085,3 +1134,4 @@ func (s *authServiceImpl) GetUserEmpresasWithRolesOptimized(ctx context.Context,
     log.Printf("Empresas optimizadas obtenidas: %d", len(empresas))
     return empresas, nil
 }
+

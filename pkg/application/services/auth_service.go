@@ -15,6 +15,11 @@ type AuthService interface {
 	Register(ctx context.Context, dni, email, password, nombres, apellidoPaterno, apellidoMaterno, nombresCompletos string, fechaNacimiento time.Time, telefono, departamento, provincia, distrito, direccionCompleta string) (*entities.User, error)
 	Login(ctx context.Context, dni, password string) (string, error)
 	VerifyToken(ctx context.Context, token string) (*auth.TokenClaims, error)
+	// Logout invalida la sesión actual del usuario
+    Logout(ctx context.Context, token string) error
+    
+    // LogoutAllSessions invalida todas las sesiones del usuario
+    LogoutAllSessions(ctx context.Context, userID uuid.UUID) error
 
 	
 	// Gestión de usuarios
@@ -63,6 +68,8 @@ type AuthService interface {
 
 
 	GetUserEmpresasWithRolesOptimized(ctx context.Context, userID uuid.UUID) ([]*entities.EmpresaConRol, error)
+
+	
 }
 
 // Estructuras auxiliares para respuestas

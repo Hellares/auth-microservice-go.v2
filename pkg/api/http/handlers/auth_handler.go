@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -67,6 +68,8 @@ func (h *AuthHandler) RegisterRoutes(router *mux.Router) {
 	// ==================== RUTAS DE AUTENTICACIÓN BÁSICA ====================
 	router.HandleFunc("/register", h.Register).Methods("POST")
 	router.HandleFunc("/login", h.Login).Methods("POST")
+	router.HandleFunc("/logout", h.Logout).Methods("POST")           
+	router.HandleFunc("/logout-all", h.LogoutAll).Methods("POST")    
 	router.HandleFunc("/verify-email", h.VerifyEmail).Methods("GET", "POST")
 	router.HandleFunc("/request-password-reset", h.RequestPasswordReset).Methods("POST")
 	router.HandleFunc("/reset-password", h.ResetPassword).Methods("POST")
@@ -1816,4 +1819,92 @@ func (h *AuthHandler) GetCurrentUserEmpresasOptimized(w http.ResponseWriter, r *
         Success: true,
         Data:    empresasConRoles,
     })
+}
+
+// ============================================================================
+// PARTE 7: GESTIÓN DE SESIONES Y LOGOUT
+// ============================================================================
+
+// Logout cierra la sesión actual del usuario
+func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+    defer r.Body.Close()
+
+    authHeader := r.Header.Get("Authorization")
+    if authHeader == "" {
+        respondWithError(w, http.StatusUnauthorized, "Token de autorización requerido")
+        return
+    }
+
+    tokenParts := strings.Split(authHeader, " ")
+    if len(tokenParts) != 2 || tokenParts[0] != "Bearer" {
+        respondWithError(w, http.StatusUnauthorized, "Formato de token inválido")
+        return
+    }
+
+    token := tokenParts[1]
+
+    // ✅ LIMPIAR COMILLAS LITERALES
+    token = strings.Trim(token, `"`)
+    
+    log.Printf("Token limpio: %s...", token[:20])
+
+    if err := h.authService.Logout(r.Context(), token); err != nil {
+        log.Printf("Error en logout: %v", err)
+        respondWithError(w, http.StatusBadRequest, err.Error())
+        return
+    }
+
+    response := map[string]interface{}{
+        "success": true,
+        "message": "Sesión cerrada exitosamente",
+    }
+
+    respondWithJSON(w, http.StatusOK, response)
+}
+
+// LogoutAll cierra todas las sesiones del usuario
+func (h *AuthHandler) LogoutAll(w http.ResponseWriter, r *http.Request) {
+    defer r.Body.Close() // Cerrar el body de la solicitud
+
+    // Obtener token para identificar al usuario
+    authHeader := r.Header.Get("Authorization")
+    if authHeader == "" {
+        respondWithError(w, http.StatusUnauthorized, "Token de autorización requerido")
+        return
+    }
+
+    tokenParts := strings.Split(authHeader, " ")
+    if len(tokenParts) != 2 || tokenParts[0] != "Bearer" {
+        respondWithError(w, http.StatusUnauthorized, "Formato de token inválido")
+        return
+    }
+
+    token := tokenParts[1]
+
+    // Verificar token y obtener userID
+    claims, err := h.authService.VerifyToken(r.Context(), token)
+    if err != nil {
+        respondWithError(w, http.StatusUnauthorized, "Token inválido")
+        return
+    }
+
+    userID, err := uuid.Parse(claims.UserID)
+    if err != nil {
+        respondWithError(w, http.StatusInternalServerError, "Error en el token")
+        return
+    }
+
+    // Cerrar todas las sesiones
+    if err := h.authService.LogoutAllSessions(r.Context(), userID); err != nil {
+        log.Printf("Error en logout all: %v", err)
+        respondWithError(w, http.StatusInternalServerError, "Error al cerrar sesiones")
+        return
+    }
+
+    response := map[string]interface{}{
+        "success": true,
+        "message": "Todas las sesiones han sido cerradas exitosamente",
+    }
+
+    respondWithJSON(w, http.StatusOK, response)
 }

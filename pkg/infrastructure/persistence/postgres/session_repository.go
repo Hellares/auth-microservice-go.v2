@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"log"
 	"time"
 
 	"auth-microservice-go.v2/pkg/domain/entities"
@@ -121,38 +123,38 @@ func (r *sessionRepository) FindByID(ctx context.Context, id uuid.UUID) (*entiti
 
 // FindByToken busca una sesión por su token.
 // Devuelve la sesión encontrada o un error si no se encuentra o falla la consulta.
-func (r *sessionRepository) FindByToken(ctx context.Context, token string) (*entities.Session, error) {
-	if token == "" {
-		return nil, ErrSessionNotFound
-	}
+// func (r *sessionRepository) FindByToken(ctx context.Context, token string) (*entities.Session, error) {
+// 	if token == "" {
+// 		return nil, ErrSessionNotFound
+// 	}
 
-	query := `
-		SELECT id, user_id, token, ip_address, user_agent, expires_at, created_at, updated_at
-		FROM sessions
-		WHERE token = $1
-	`
+// 	query := `
+// 		SELECT id, user_id, token, ip_address, user_agent, expires_at, created_at, updated_at
+// 		FROM sessions
+// 		WHERE token = $1
+// 	`
 
-	var session entities.Session
-	err := r.db.QueryRowContext(ctx, query, token).Scan(
-		&session.ID,
-		&session.UserID,
-		&session.Token,
-		&session.IPAddress,
-		&session.UserAgent,
-		&session.ExpiresAt,
-		&session.CreatedAt,
-		&session.UpdatedAt,
-	)
+// 	var session entities.Session
+// 	err := r.db.QueryRowContext(ctx, query, token).Scan(
+// 		&session.ID,
+// 		&session.UserID,
+// 		&session.Token,
+// 		&session.IPAddress,
+// 		&session.UserAgent,
+// 		&session.ExpiresAt,
+// 		&session.CreatedAt,
+// 		&session.UpdatedAt,
+// 	)
 
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, ErrSessionNotFound
-		}
-		return nil, err
-	}
+// 	if err != nil {
+// 		if err == sql.ErrNoRows {
+// 			return nil, ErrSessionNotFound
+// 		}
+// 		return nil, err
+// 	}
 
-	return &session, nil
-}
+// 	return &session, nil
+// }
 
 // FindByUser busca todas las sesiones asociadas a un usuario por su ID.
 // Devuelve una lista de sesiones o un error si falla la consulta.
@@ -290,4 +292,100 @@ func (r *sessionRepository) DeleteExpired(ctx context.Context) error {
 	query := `DELETE FROM sessions WHERE expires_at < NOW()`
 	_, err := r.db.ExecContext(ctx, query)
 	return err
+}
+
+
+// ============================================================================
+// MÉTODOS NECESARIOS PARA EL LOGOUT
+// ============================================================================
+
+// FindByToken busca una sesión por su token
+func (r *sessionRepository) FindByToken(ctx context.Context, token string) (*entities.Session, error) {
+	if token == "" {
+		return nil, ErrSessionNotFound
+	}
+
+	var session entities.Session
+	
+	query := `
+		SELECT id, user_id, token, ip_address, user_agent, expires_at, created_at, updated_at
+		FROM sessions 
+		WHERE token = $1 AND expires_at > NOW()
+	`
+	
+	err := r.db.QueryRowContext(ctx, query, token).Scan(
+		&session.ID,
+		&session.UserID,
+		&session.Token,
+		&session.IPAddress,
+		&session.UserAgent,
+		&session.ExpiresAt,
+		&session.CreatedAt,
+		&session.UpdatedAt,
+	)
+	
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrSessionNotFound
+		}
+		return nil, fmt.Errorf("error al buscar sesión por token: %v", err)
+	}
+	
+	return &session, nil
+}
+
+// DeleteByToken elimina una sesión por su token
+func (r *sessionRepository) DeleteByToken(ctx context.Context, token string) error {
+	if token == "" {
+		return errors.New("token vacío")
+	}
+
+	query := `DELETE FROM sessions WHERE token = $1`
+	
+	result, err := r.db.ExecContext(ctx, query, token)
+	if err != nil {
+		return fmt.Errorf("error al eliminar sesión por token: %v", err)
+	}
+	
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("error al verificar filas afectadas: %v", err)
+	}
+	
+	if rowsAffected == 0 {
+		return ErrSessionNotFound
+	}
+	
+	return nil
+}
+
+// DeleteAllByUserID elimina todas las sesiones de un usuario
+func (r *sessionRepository) DeleteAllByUserID(ctx context.Context, userID uuid.UUID) error {
+	if userID == uuid.Nil {
+		return errors.New("ID de usuario inválido")
+	}
+
+	query := `DELETE FROM sessions WHERE user_id = $1`
+	
+	_, err := r.db.ExecContext(ctx, query, userID)
+	if err != nil {
+		return fmt.Errorf("error al eliminar sesiones del usuario: %v", err)
+	}
+	
+	return nil
+}
+
+// DeleteExpiredSessions elimina sesiones expiradas
+func (r *sessionRepository) DeleteExpiredSessions(ctx context.Context) error {
+	query := `DELETE FROM sessions WHERE expires_at <= NOW()`
+	
+	result, err := r.db.ExecContext(ctx, query)
+	if err != nil {
+		return fmt.Errorf("error al eliminar sesiones expiradas: %v", err)
+	}
+	
+	rowsAffected, _ := result.RowsAffected()
+	log.Printf("Sesiones expiradas eliminadas: %d", rowsAffected)
+	
+	return nil
 }

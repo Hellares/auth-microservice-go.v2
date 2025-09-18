@@ -12,7 +12,7 @@ type SessionRepository interface {
 	Create(ctx context.Context, session *entities.Session) error
 	Update(ctx context.Context, session *entities.Session) error
 	FindByID(ctx context.Context, id uuid.UUID) (*entities.Session, error)
-	FindByToken(ctx context.Context, token string) (*entities.Session, error)
+	// FindByToken(ctx context.Context, token string) (*entities.Session, error)
 	FindByUser(ctx context.Context, userID uuid.UUID) ([]*entities.Session, error)
 	Delete(ctx context.Context, id uuid.UUID) error
 	DeleteAllForUser(ctx context.Context, userID uuid.UUID) error
@@ -35,4 +35,12 @@ type SessionRepository interface {
 	
 	// GetSessionsByIPAddress obtiene sesiones por dirección IP (para seguridad)
 	GetSessionsByIPAddress(ctx context.Context, ipAddress string) ([]*entities.Session, error)
+
+    
+    
+    // Nuevos métodos para logout
+	FindByToken(ctx context.Context, token string) (*entities.Session, error)
+	DeleteByToken(ctx context.Context, token string) error
+	DeleteAllByUserID(ctx context.Context, userID uuid.UUID) error
+	DeleteExpiredSessions(ctx context.Context) error
 }
