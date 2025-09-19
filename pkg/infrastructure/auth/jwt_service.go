@@ -16,8 +16,6 @@
 // 	jwt.RegisteredClaims
 // }
 
-
-
 // // TokenClaimsWithEmpresa representa los datos incluidos en el token JWT con empresa específica
 // type TokenClaimsWithEmpresa struct {
 // 	UserID    string `json:"userId"`
@@ -156,7 +154,7 @@
 //     } else {
 //         expirationTime = time.Now()
 //     }
-    
+
 //     now := time.Now()
 
 //     // Si el token expira en menos de 12 horas, generamos uno nuevo
@@ -180,7 +178,7 @@
 //     } else {
 //         expirationTime = time.Now()
 //     }
-    
+
 //     now := time.Now()
 
 //     if expirationTime.Sub(now) < 12*time.Hour {
@@ -329,11 +327,12 @@
 package auth
 
 import (
-    "errors"
-    "time"
+	"errors"
+	// "fmt"
+	"time"
 
-    "github.com/golang-jwt/jwt/v4"
-    "github.com/google/uuid"
+	"github.com/golang-jwt/jwt/v4"
+	"github.com/google/uuid"
 )
 
 // TokenClaims representa los datos incluidos en el token JWT
@@ -342,6 +341,9 @@ type TokenClaims struct {
     DNI       string `json:"dni"`
     Email     string `json:"email"`
     EmpresaID string `json:"empresaId,omitempty"` // Campo opcional
+    Roles         []string `json:"roles"`
+    PrincipalRole string   `json:"principalRole"`
+    Permissions   []string `json:"permissions"`
     jwt.RegisteredClaims
 }
 
@@ -387,6 +389,11 @@ func (s *JWTService) GenerateTokenWithEmpresa(claims *TokenClaims) (string, erro
     return s.GenerateToken(claims) // Reutiliza GenerateToken
 }
 
+// func (s *JWTService) GenerateTokenWithEmpresa(claims *TokenClaimsWithEmpresa) (string, error) {
+//     token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+//     return token.SignedString(s.secretKey)
+// }
+
 // ValidateToken valida un token JWT y devuelve los claims
 func (s *JWTService) ValidateToken(tokenString string) (*TokenClaims, error) {
     claims := &TokenClaims{}
@@ -413,7 +420,24 @@ func (s *JWTService) ValidateToken(tokenString string) (*TokenClaims, error) {
 func (s *JWTService) ValidateTokenWithEmpresa(tokenString string) (*TokenClaims, error) {
     return s.ValidateToken(tokenString) // Reutiliza ValidateToken
 }
+// func (s *JWTService) ValidateTokenWithEmpresa(tokenString string) (*TokenClaimsWithEmpresa, error) {
+//     token, err := jwt.ParseWithClaims(tokenString, &TokenClaimsWithEmpresa{}, func(token *jwt.Token) (interface{}, error) {
+//         if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+//             return nil, fmt.Errorf("método de firma inesperado: %v", token.Header["alg"])
+//         }
+//         return s.secretKey, nil
+//     })
 
+//     if err != nil {
+//         return nil, err
+//     }
+
+//     if claims, ok := token.Claims.(*TokenClaimsWithEmpresa); ok && token.Valid {
+//         return claims, nil
+//     }
+
+//     return nil, fmt.Errorf("token inválido")
+// }
 // ValidateAnyToken intenta validar un token como básico o con empresa
 func (s *JWTService) ValidateAnyToken(tokenString string) (interface{}, error) {
     claims, err := s.ValidateToken(tokenString)

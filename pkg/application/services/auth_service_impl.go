@@ -657,24 +657,110 @@ func (s *authServiceImpl) LoginMultiempresa(ctx context.Context, dni, password s
 
 
 // GenerateTokenWithEmpresa genera un token específico para una empresa
+// func (s *authServiceImpl) GenerateTokenWithEmpresa(ctx context.Context, userID, empresaID uuid.UUID) (string, error) {
+// 	user, err := s.userRepo.FindByID(ctx, userID)
+// 	if err != nil {
+// 		return "", err
+// 	}
+
+// 	// Crear claims con empresa específica
+// 	claims := &auth.TokenClaimsWithEmpresa{
+// 		UserID:    user.ID.String(),
+// 		DNI:       user.DNI,
+// 		Email:     user.Email,
+// 		EmpresaID: empresaID.String(), // Agregar empresa al token
+// 		RegisteredClaims: jwt.RegisteredClaims{
+// 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.tokenExpiration)),
+// 		},
+// 	}
+
+// 	return s.jwtService.GenerateTokenWithEmpresa(claims)
+// }
+
 func (s *authServiceImpl) GenerateTokenWithEmpresa(ctx context.Context, userID, empresaID uuid.UUID) (string, error) {
-	user, err := s.userRepo.FindByID(ctx, userID)
-	if err != nil {
-		return "", err
-	}
+    // Obtener información del usuario
+    user, err := s.userRepo.FindByID(ctx, userID)
+    if err != nil {
+        return "", err
+    }
 
-	// Crear claims con empresa específica
-	claims := &auth.TokenClaimsWithEmpresa{
-		UserID:    user.ID.String(),
-		DNI:       user.DNI,
-		Email:     user.Email,
-		EmpresaID: empresaID.String(), // Agregar empresa al token
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.tokenExpiration)),
-		},
-	}
+    // Obtener roles del usuario en la empresa
+    roles, err := s.GetUserRoles(ctx, userID, empresaID)
+    if err != nil {
+        return "", err
+    }
 
-	return s.jwtService.GenerateTokenWithEmpresa(claims)
+    // Determinar rol principal
+    principalRole := "USER"
+    if len(roles) > 0 {
+        // Usar la misma lógica de jerarquía
+        hierarchy := []string{"SUPER_ADMIN", "EMPRESA_ADMIN", "ADMIN_USERS", "EMPLEADO", "CLIENTE"}
+        for _, hierarchyRole := range hierarchy {
+            for _, userRole := range roles {
+                if userRole.Name == hierarchyRole {
+                    principalRole = hierarchyRole
+                    goto found
+                }
+            }
+        }
+        found:
+        if principalRole == "USER" && len(roles) > 0 {
+            principalRole = roles[0].Name
+        }
+    }
+
+    // Obtener permisos
+    var allPermissions []string
+    for _, role := range roles {
+        permissions, err := s.GetPermissionsByRole(ctx, role.ID)
+        if err != nil {
+            continue
+        }
+        for _, perm := range permissions {
+            allPermissions = append(allPermissions, perm.Name)
+        }
+    }
+
+    // Eliminar duplicados
+    uniquePermissions := uniqueStringSlice(allPermissions)
+
+    // Extraer solo nombres de roles para el token
+    var roleNames []string
+    for _, role := range roles {
+        roleNames = append(roleNames, role.Name)
+    }
+
+    // Crear claims extendidos con información de empresa
+    claims := &auth.TokenClaimsWithEmpresa{
+        UserID:        user.ID.String(),
+        DNI:           user.DNI,
+        Email:         user.Email,
+        EmpresaID:     empresaID.String(),
+        Roles:         roleNames,
+        PrincipalRole: principalRole,
+        Permissions:   uniquePermissions,
+        RegisteredClaims: jwt.RegisteredClaims{
+            ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.tokenExpiration)),
+        },
+    }
+
+    // Generar token JWT
+    return s.jwtService.GenerateTokenWithEmpresa(claims)
+}
+
+// Función auxiliar
+func uniqueStringSlice(input []string) []string {
+    keys := make(map[string]bool)
+    var result []string
+    
+    for _, item := range input {
+        if !keys[item] {
+            keys[item] = true
+            result = append(result, item)
+        }
+    }
+    
+    return result
 }
 
 // UserBelongsToEmpresa verifica si un usuario pertenece a una empresa

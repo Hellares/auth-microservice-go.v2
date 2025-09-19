@@ -411,6 +411,77 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// func (h *AuthHandler) SelectEmpresa(w http.ResponseWriter, r *http.Request) {
+//     defer r.Body.Close() // Cerrar el body de la solicitud
+
+//     // Extraer token básico del header
+//     token := extractToken(r)
+//     if token == "" {
+//         respondWithError(w, http.StatusUnauthorized, "No autorizado")
+//         return
+//     }
+
+//     // Verificar token básico
+//     claims, err := h.authService.VerifyToken(r.Context(), token)
+//     if err != nil {
+//         respondWithError(w, http.StatusUnauthorized, err.Error())
+//         return
+//     }
+
+//     // Verificar que el token no tenga EmpresaID
+//     if claims.EmpresaID != "" {
+//         respondWithError(w, http.StatusBadRequest, "El token ya está asociado a una empresa")
+//         return
+//     }
+
+//     // Estructura para la empresa seleccionada
+//     var req struct {
+//         EmpresaID uuid.UUID `json:"empresaId"`
+//     }
+
+//     // Decodificar request
+//     if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
+//         respondWithError(w, http.StatusBadRequest, "Petición inválida")
+//         return
+//     }
+
+//     userID := uuid.MustParse(claims.UserID)
+
+//     // Verificar que el usuario pertenece a esa empresa
+//     var hasAccess bool
+//     hasAccess, err = h.authService.UserBelongsToEmpresa(r.Context(), userID, req.EmpresaID)
+//     if err != nil || !hasAccess {
+//         respondWithError(w, http.StatusForbidden, "No tienes acceso a esta empresa")
+//         return
+//     }
+
+//     // Generar nuevo token con empresa seleccionada
+//     var newToken string
+//     newToken, err = h.authService.GenerateTokenWithEmpresa(r.Context(), userID, req.EmpresaID)
+//     if err != nil {
+//         respondWithError(w, http.StatusInternalServerError, "Error generando token")
+//         return
+//     }
+
+//     // Obtener roles y permisos específicos para la empresa seleccionada
+//     var roles []*entities.Role
+//     roles, err = h.authService.GetUserRoles(r.Context(), userID, req.EmpresaID)
+//     if err != nil {
+//         respondWithError(w, http.StatusInternalServerError, "Error obteniendo roles")
+//         return
+//     }
+
+//     // Responder con nuevo token y contexto de empresa
+//     respondWithJSON(w, http.StatusOK, Response{
+//         Success: true,
+//         Data: map[string]interface{}{
+//             "token":     newToken,       // Nuevo token con empresa específica
+//             "empresaId": req.EmpresaID,  // ID de empresa seleccionada
+//             "roles":     roles,          // Roles del usuario en esa empresa
+//         },
+//     })
+// }
+
 func (h *AuthHandler) SelectEmpresa(w http.ResponseWriter, r *http.Request) {
     defer r.Body.Close() // Cerrar el body de la solicitud
 
@@ -421,66 +492,140 @@ func (h *AuthHandler) SelectEmpresa(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Verificar token básico
+    // Verificar token y obtener claims
     claims, err := h.authService.VerifyToken(r.Context(), token)
     if err != nil {
         respondWithError(w, http.StatusUnauthorized, err.Error())
         return
     }
 
-    // Verificar que el token no tenga EmpresaID
-    if claims.EmpresaID != "" {
-        respondWithError(w, http.StatusBadRequest, "El token ya está asociado a una empresa")
+    // Obtener ID del usuario del token
+    userID, err := uuid.Parse(claims.UserID)
+    if err != nil {
+        respondWithError(w, http.StatusInternalServerError, "Error en el token")
         return
     }
 
-    // Estructura para la empresa seleccionada
+    // Decodificar el body de la petición
     var req struct {
-        EmpresaID uuid.UUID `json:"empresaId"`
+        EmpresaID string `json:"empresaId"`
     }
 
-    // Decodificar request
-    if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
         respondWithError(w, http.StatusBadRequest, "Petición inválida")
         return
     }
 
-    userID := uuid.MustParse(claims.UserID)
+    // Validar que se proporcione el ID de empresa
+    if req.EmpresaID == "" {
+        respondWithError(w, http.StatusBadRequest, "ID de empresa es requerido")
+        return
+    }
 
-    // Verificar que el usuario pertenece a esa empresa
-    var hasAccess bool
-    hasAccess, err = h.authService.UserBelongsToEmpresa(r.Context(), userID, req.EmpresaID)
-    if err != nil || !hasAccess {
+    // Parsear UUID de empresa
+    empresaID, err := uuid.Parse(req.EmpresaID)
+    if err != nil {
+        respondWithError(w, http.StatusBadRequest, "ID de empresa inválido")
+        return
+    }
+
+    // Verificar que el usuario tenga acceso a esta empresa
+    hasAccess, err := h.authService.UserBelongsToEmpresa(r.Context(), userID, empresaID)
+    if err != nil {
+        respondWithError(w, http.StatusInternalServerError, "Error verificando acceso a empresa")
+        return
+    }
+
+    if !hasAccess {
         respondWithError(w, http.StatusForbidden, "No tienes acceso a esta empresa")
         return
     }
 
-    // Generar nuevo token con empresa seleccionada
-    var newToken string
-    newToken, err = h.authService.GenerateTokenWithEmpresa(r.Context(), userID, req.EmpresaID)
+    // ✅ AGREGAR: Obtener roles del usuario en esta empresa
+    roles, err := h.authService.GetUserRoles(r.Context(), userID, empresaID)
     if err != nil {
+        log.Printf("Error obteniendo roles del usuario: %v", err)
+        respondWithError(w, http.StatusInternalServerError, "Error obteniendo roles del usuario")
+        return
+    }
+
+    // ✅ AGREGAR: Determinar rol principal
+    principalRole := determinePrincipalRole(roles)
+
+    // ✅ AGREGAR: Obtener todos los permisos del usuario
+    var allPermissions []string
+    for _, role := range roles {
+        permissions, err := h.authService.GetPermissionsByRole(r.Context(), role.ID)
+        if err != nil {
+            log.Printf("Error obteniendo permisos para rol %s: %v", role.ID, err)
+            continue
+        }
+        for _, perm := range permissions {
+            allPermissions = append(allPermissions, perm.Name)
+        }
+    }
+
+    // Eliminar permisos duplicados
+    uniquePermissions := uniqueStrings(allPermissions)
+
+    // ✅ AGREGAR: Generar nuevo token con información específica de empresa
+    newToken, err := h.authService.GenerateTokenWithEmpresa(r.Context(), userID, empresaID)
+    if err != nil {
+        log.Printf("Error generando token con empresa: %v", err)
         respondWithError(w, http.StatusInternalServerError, "Error generando token")
         return
     }
 
-    // Obtener roles y permisos específicos para la empresa seleccionada
-    var roles []*entities.Role
-    roles, err = h.authService.GetUserRoles(r.Context(), userID, req.EmpresaID)
-    if err != nil {
-        respondWithError(w, http.StatusInternalServerError, "Error obteniendo roles")
-        return
-    }
-
-    // Responder con nuevo token y contexto de empresa
+    // ✅ CORREGIR: Respuesta completa con toda la información
     respondWithJSON(w, http.StatusOK, Response{
         Success: true,
+        Message: "Empresa seleccionada exitosamente",
         Data: map[string]interface{}{
-            "token":     newToken,       // Nuevo token con empresa específica
-            "empresaId": req.EmpresaID,  // ID de empresa seleccionada
-            "roles":     roles,          // Roles del usuario en esa empresa
+            "token":         newToken,
+            "empresaId":     req.EmpresaID,
+            "roles":         roles,           // ✅ Objetos completos de roles
+            "principalRole": principalRole,   // ✅ Rol principal
+            "permissions":   uniquePermissions, // ✅ Array de permisos únicos
         },
     })
 }
+
+// ✅ AGREGAR: Función auxiliar para determinar rol principal
+func determinePrincipalRole(roles []*entities.Role) string {
+    if len(roles) == 0 {
+        return "USER"
+    }
+
+    // Jerarquía de roles (del más alto al más bajo)
+    hierarchy := []string{"SUPER_ADMIN", "EMPRESA_ADMIN", "ADMIN_USERS", "EMPLEADO", "CLIENTE"}
+    
+    for _, hierarchyRole := range hierarchy {
+        for _, userRole := range roles {
+            if userRole.Name == hierarchyRole {
+                return hierarchyRole
+            }
+        }
+    }
+
+    // Si no encuentra un rol conocido, retornar el primero
+    return roles[0].Name
+}
+
+// ✅ AGREGAR: Función auxiliar para eliminar strings duplicados
+func uniqueStrings(input []string) []string {
+    keys := make(map[string]bool)
+    var result []string
+    
+    for _, item := range input {
+        if !keys[item] {
+            keys[item] = true
+            result = append(result, item)
+        }
+    }
+    
+    return result
+}
+
 
 
 // VerifyEmail verifica el email de un usuario usando un token
