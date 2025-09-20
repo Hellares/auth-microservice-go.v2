@@ -52,13 +52,20 @@ COPY --chown=appuser:appgroup config/ ./config/
 # Hacer ejecutables
 RUN chmod +x ./auth-api ./auth-worker ./auth-service
 
+# 🔥 VARIABLES DE ENTORNO PARA EL MANAGER
+ENV GO_ENV=production
+ENV AUTH_MODE=both
+ENV DOCKER_CONTAINER=true
+ENV GIN_MODE=release
+
 # Cambiar a usuario no-root
 USER appuser
 
-# Exponer puerto
+# Exponer puertos (ajustar según tus servicios)
 EXPOSE 3007
+EXPOSE 3008
 
-# Health check
+# Health check mejorado
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:3007/health || exit 1
 

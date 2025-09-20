@@ -18,6 +18,12 @@ services:
     restart: unless-stopped
     
     environment:
+      # 🔥 CONFIGURACIÓN DEL MANAGER (NUEVAS VARIABLES)
+      GO_ENV: production
+      AUTH_MODE: both                    # "api", "worker", o "both"
+      DOCKER_CONTAINER: "true"
+      GIN_MODE: release
+      
       # Base de datos
       DATABASE_HOST: 86.48.26.221
       DATABASE_PORT: 5432
@@ -47,12 +53,12 @@ services:
       SMTP_FROM: "Autenticación <hellares98@gmail.com>"
       
       # URLs - cambiar por tu IP/dominio
-      URLS_RESET_PASSWORD: "http://localhost:3007/api/auth/reset-password"
-      URLS_VERIFY_EMAIL: "http://localhost:3007/api/auth/verify-email"
+      URLS_RESET_PASSWORD: "http://86.48.26.221:3007/api/auth/reset-password"
+      URLS_VERIFY_EMAIL: "http://86.48.26.221:3007/api/auth/verify-email"
       
       # Sitio
       SITE_NAME: "Sistema de Autenticación"
-      SITE_URL: "http://localhost:3007"
+      SITE_URL: "http://86.48.26.221:3007"
       SITE_SUPPORT_EMAIL: "hellares98@gmail.com"
       
       # RabbitMQ
@@ -62,7 +68,6 @@ services:
       
       # Otros
       TZ: America/Lima
-      GO_ENV: production
       LOG_LEVEL: info
 
     volumes:
@@ -72,6 +77,8 @@ services:
 
     ports:
       - "3007:3007"
+      # 💡 Si tu worker expone un puerto adicional, descomenta:
+      # - "3008:3008"
 
     networks:
       - elastika-network

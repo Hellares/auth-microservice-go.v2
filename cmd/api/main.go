@@ -362,36 +362,36 @@ func performGracefulShutdown(server *http.Server) error {
 // ============================================================================
 
 // validateConfiguration valida que la configuración esté completa
-func validateConfiguration() error {
-	// Solo validar si viper ya está configurado
-	if !viper.IsSet("database.host") {
-		// En la primera ejecución, viper aún no está configurado
-		return nil
-	}
+// func validateConfiguration() error {
+// 	// Solo validar si viper ya está configurado
+// 	if !viper.IsSet("database.host") {
+// 		// En la primera ejecución, viper aún no está configurado
+// 		return nil
+// 	}
 
-	requiredConfigs := map[string]string{
-		"database.host":     viper.GetString("database.host"),
-		"database.port":     viper.GetString("database.port"),
-		"database.user":     viper.GetString("database.user"),
-		"database.password": viper.GetString("database.password"),
-		"database.name":     viper.GetString("database.name"),
-		"auth.jwt_secret":   viper.GetString("auth.jwt_secret"),
-	}
+// 	requiredConfigs := map[string]string{
+// 		"database.host":     viper.GetString("database.host"),
+// 		"database.port":     viper.GetString("database.port"),
+// 		"database.user":     viper.GetString("database.user"),
+// 		"database.password": viper.GetString("database.password"),
+// 		"database.name":     viper.GetString("database.name"),
+// 		"auth.jwt_secret":   viper.GetString("auth.jwt_secret"),
+// 	}
 
-	for key, value := range requiredConfigs {
-		if value == "" {
-			return fmt.Errorf("configuración requerida faltante: %s", key)
-		}
-	}
+// 	for key, value := range requiredConfigs {
+// 		if value == "" {
+// 			return fmt.Errorf("configuración requerida faltante: %s", key)
+// 		}
+// 	}
 
-	// Validar que el JWT secret sea suficientemente seguro
-	jwtSecret := viper.GetString("auth.jwt_secret")
-	if len(jwtSecret) < 32 {
-		return fmt.Errorf("JWT secret debe tener al menos 32 caracteres")
-	}
+// 	// Validar que el JWT secret sea suficientemente seguro
+// 	jwtSecret := viper.GetString("auth.jwt_secret")
+// 	if len(jwtSecret) < 32 {
+// 		return fmt.Errorf("JWT secret debe tener al menos 32 caracteres")
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
 
 // logServerInfo registra información útil del servidor
 // func logServerInfo() {
@@ -408,25 +408,25 @@ func validateConfiguration() error {
 // }
 
 // setupDevelopmentHelpers configura utilidades para desarrollo
-func setupDevelopmentHelpers() {
-	if viper.GetString("server.env") == "development" {
-		log.Println("🛠️  Modo desarrollo activado")
-		// logServerInfo()
+// func setupDevelopmentHelpers() {
+// 	if viper.GetString("server.env") == "development" {
+// 		log.Println("🛠️  Modo desarrollo activado")
+// 		// logServerInfo()
 		
-		// En desarrollo, mostrar rutas disponibles
-		log.Println("📝 Rutas principales disponibles:")
-		log.Printf("   - POST /api/auth/register")
-		log.Printf("   - POST /api/auth/login")
-		log.Printf("   - GET  /api/auth/me")
-		log.Printf("   - GET  /api/auth/users/me/empresas-optimized")
-		log.Printf("   - GET  /health")
+// 		// En desarrollo, mostrar rutas disponibles
+// 		log.Println("📝 Rutas principales disponibles:")
+// 		log.Printf("   - POST /api/auth/register")
+// 		log.Printf("   - POST /api/auth/login")
+// 		log.Printf("   - GET  /api/auth/me")
+// 		log.Printf("   - GET  /api/auth/users/me/empresas-optimized")
+// 		log.Printf("   - GET  /health")
 		
-		// Mostrar configuración de desarrollo
-		log.Printf("🔧 Configuración de desarrollo:")
-		log.Printf("   - Debug mode: %t", viper.GetBool("debug"))
-		log.Printf("   - Hot reload: %t", viper.GetBool("hot_reload"))
-	}
-}
+// 		// Mostrar configuración de desarrollo
+// 		log.Printf("🔧 Configuración de desarrollo:")
+// 		log.Printf("   - Debug mode: %t", viper.GetBool("debug"))
+// 		log.Printf("   - Hot reload: %t", viper.GetBool("hot_reload"))
+// 	}
+// }
 
 // ============================================================================
 // HEALTH CHECKS Y MONITORING
