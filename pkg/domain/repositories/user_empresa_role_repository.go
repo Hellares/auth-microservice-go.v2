@@ -3,8 +3,8 @@ package repositories
 import (
 	"context"
 
-	"github.com/google/uuid"
 	"auth-microservice-go.v2/pkg/domain/entities"
+	"github.com/google/uuid"
 )
 
 type UserEmpresaRoleRepository interface {

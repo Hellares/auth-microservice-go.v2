@@ -17,6 +17,7 @@ import (
 	"auth-microservice-go.v2/pkg/domain/entities"
 	"auth-microservice-go.v2/pkg/domain/repositories"
 	"auth-microservice-go.v2/pkg/infrastructure/auth"
+	"auth-microservice-go.v2/pkg/infrastructure/persistence/postgres"
 )
 
 // authServiceImpl implementa la interfaz AuthService
@@ -125,55 +126,56 @@ func (s *authServiceImpl) Register(ctx context.Context, dni, email, password, no
 }
 
 // Login autentica a un usuario
-func (s *authServiceImpl) Login(ctx context.Context, dni, password string) (string, error) {
-	// Buscar usuario por DNI
-	user, err := s.userRepo.FindByDNI(ctx, dni)
-	if err != nil {
-		return "", errors.New("credenciales inválidas")
-	}
+// func (s *authServiceImpl) Login(ctx context.Context, dni, password string) (string, error) {
+// 	// Buscar usuario por DNI
+// 	user, err := s.userRepo.FindByDNI(ctx, dni)
+// 	if err != nil {
+// 		return "", errors.New("credenciales inválidas")
+// 	}
 
-	// Verificar contraseña
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
-		return "", errors.New("credenciales inválidas")
-	}
+// 	// Verificar contraseña
+// 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+// 		return "", errors.New("credenciales inválidas")
+// 	}
 
-	// Crear claims para el token JWT
-	claims := &auth.TokenClaims{
-		UserID: user.ID.String(),
-		DNI:    user.DNI,
-		Email:  user.Email,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.tokenExpiration)),
-		},
-	}
+// 	// Crear claims para el token JWT
+// 	claims := &auth.TokenClaims{
+// 		UserID: user.ID.String(),
+// 		DNI:    user.DNI,
+// 		Email:  user.Email,
+// 		RegisteredClaims: jwt.RegisteredClaims{
+// 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.tokenExpiration)),
+// 		},
+// 	}
 
-	// Generar token JWT
-	token, err := s.jwtService.GenerateToken(claims)
-	if err != nil {
-		return "", fmt.Errorf("error al generar el token: %v", err)
-	}
+// 	// Generar token JWT
+// 	token, err := s.jwtService.GenerateToken(claims)
+// 	if err != nil {
+// 		return "", fmt.Errorf("error al generar el token: %v", err)
+// 	}
 
-	// Crear sesión
-	session := &entities.Session{
-		ID:        uuid.New(),
-		UserID:    user.ID,
-		Token:     token,
-		ExpiresAt: time.Now().Add(s.tokenExpiration),
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	}
+// 	// Crear sesión
+// 	session := &entities.Session{
+// 		ID:        uuid.New(),
+// 		UserID:    user.ID,
+// 		Token:     token,
+// 		ExpiresAt: time.Now().Add(s.tokenExpiration),
+// 		CreatedAt: time.Now(),
+// 		UpdatedAt: time.Now(),
+// 	}
 
-	if err := s.sessionRepo.Create(ctx, session ); err != nil {
-		return "", fmt.Errorf("error al crear la sesión: %v", err)
-	}
+// 	if err := s.sessionRepo.Create(ctx, session ); err != nil {
+// 		return "", fmt.Errorf("error al crear la sesión: %v", err)
+// 	}
 
-	// Actualizar último login
-	if err := s.userRepo.UpdateLastLogin(ctx, user.ID); err != nil {
-		log.Printf("Error actualizando último login: %v", err)
-	}
+// 	// Actualizar último login
+// 	if err := s.userRepo.UpdateLastLogin(ctx, user.ID); err != nil {
+// 		log.Printf("Error actualizando último login: %v", err)
+// 	}
 
-	return token, nil
-}
+// 	return token, nil
+	
+// }
 
 
 func (s *authServiceImpl) VerifyToken(ctx context.Context, tokenString string) (*auth.TokenClaims, error) {
@@ -1008,7 +1010,7 @@ func (s *authServiceImpl) GetUserEmpresasWithRoles(ctx context.Context, userID u
 
 //TODO: getEmpresaName simula una llamada al microservicio de empresas
 //!! En producción, reemplazar con una llamada real o caché
-func (s *authServiceImpl) getEmpresaName(ctx context.Context, empresaID uuid.UUID) (string, error) {
+func (s *authServiceImpl) getEmpresaName(_ context.Context, empresaID uuid.UUID) (string, error) {
     // Simulación: en producción, usa un cliente HTTP o gRPC
     // Ejemplo: client.GetEmpresa(ctx, empresaID)
     return fmt.Sprintf("Empresa-%s", empresaID.String()), nil
@@ -1050,6 +1052,73 @@ func uniqueStrings(slice []string) []string {
 }
 
 // ListUsersInEmpresa lista usuarios de una empresa específica con filtros
+// func (s *authServiceImpl) ListUsersInEmpresa(ctx context.Context, empresaID uuid.UUID, page, limit int, filters map[string]string) ([]*UserInfo, int, error) {
+// 	// Obtener todos los IDs de usuarios de esta empresa
+// 	userIDs, err := s.userEmpresaRoleRepo.GetAllUsersByEmpresa(ctx, empresaID, filters["role"])
+// 	if err != nil {
+// 		return nil, 0, err
+// 	}
+
+// 	if len(userIDs) == 0 {
+// 		return []*UserInfo{}, 0, nil
+// 	}
+
+// 	// Crear un nuevo mapa de filtros que incluya los IDs
+// 	userFilters := make(map[string]interface{})
+// 	for k, v := range filters {
+// 		if k != "role" { // El filtro de rol ya se aplicó al obtener los userIDs
+// 			userFilters[k] = v
+// 		}
+// 	}
+// 	userFilters["ids"] = userIDs
+
+// 	// Obtener usuarios con paginación y filtros
+// 	users, total, err := s.userRepo.ListWithAdvancedFilters(ctx, page, limit, userFilters)
+// 	if err != nil {
+// 		return nil, 0, err
+// 	}
+
+// 	userInfos := make([]*UserInfo, len(users))
+
+// 	for i, user := range users {
+// 		// Para cada usuario, obtener sus roles en esta empresa
+// 		roles, err := s.GetUserRoles(ctx, user.ID, empresaID)
+// 		if err != nil {
+// 			log.Printf("Error obteniendo roles para usuario %s: %v", user.ID, err)
+// 			roles = []*entities.Role{}
+// 		}
+
+// 		// Convertir roles a formato simple
+// 		roleInfos := make([]RoleSimple, len(roles))
+// 		for j, role := range roles {
+// 			roleInfos[j] = RoleSimple{
+// 				ID:          role.ID,
+// 				Name:        role.Name,
+// 				Description: role.Description,
+// 			}
+// 		}
+
+// 		// Crear UserInfo (sin incluir todas las empresas para esta vista)
+// 		userInfos[i] = &UserInfo{
+// 			ID:               user.ID,
+// 			DNI:              user.DNI,
+// 			Email:            user.Email,
+// 			Nombres:          user.Nombres,
+// 			ApellidoPaterno:  user.ApellidoPaterno,
+// 			ApellidoMaterno:  user.ApellidoMaterno,
+// 			NombresCompletos: user.NombresCompletos,
+// 			Telefono:         user.Telefono,
+// 			Status:           user.Status,
+// 			Verified:         user.Verified,
+// 			CreatedAt:        user.CreatedAt,
+// 			UpdatedAt:        user.UpdatedAt,
+// 			// Roles:            roleInfos,
+// 		}
+// 	}
+
+// 	return userInfos, total, nil
+// }
+
 func (s *authServiceImpl) ListUsersInEmpresa(ctx context.Context, empresaID uuid.UUID, page, limit int, filters map[string]string) ([]*UserInfo, int, error) {
 	// Obtener todos los IDs de usuarios de esta empresa
 	userIDs, err := s.userEmpresaRoleRepo.GetAllUsersByEmpresa(ctx, empresaID, filters["role"])
@@ -1061,24 +1130,83 @@ func (s *authServiceImpl) ListUsersInEmpresa(ctx context.Context, empresaID uuid
 		return []*UserInfo{}, 0, nil
 	}
 
-	// Crear un nuevo mapa de filtros que incluya los IDs
-	userFilters := make(map[string]interface{})
+	// Convertir filtros legacy al nuevo formato ListUsersParams
+	params := postgres.ListUsersParams{
+		IDs:    userIDs,
+		Limit:  limit,
+		Offset: (page - 1) * limit,
+	}
+
+	// Aplicar filtros adicionales (excluyendo "role" que ya se aplicó)
 	for k, v := range filters {
-		if k != "role" { // El filtro de rol ya se aplicó al obtener los userIDs
-			userFilters[k] = v
+		if k == "role" {
+			continue // Ya aplicado al obtener userIDs
+		}
+		
+		switch k {
+		case "status":
+			if v != "" {
+				status := entities.UserStatus(v)
+				params.Status = &status
+			}
+		case "verified":
+			switch v {
+			case "true":
+				verified := true
+				params.Verified = &verified
+			case "false":
+				verified := false
+				params.Verified = &verified
+			}
+		case "search":
+			if v != "" {
+				params.Search = &v
+			}
+		case "departamento":
+			if v != "" {
+				params.Departamento = &v
+			}
+		case "provincia":
+			if v != "" {
+				params.Provincia = &v
+			}
+		case "distrito":
+			if v != "" {
+				params.Distrito = &v
+			}
 		}
 	}
-	userFilters["ids"] = userIDs
 
-	// Obtener usuarios con paginación y filtros
-	users, total, err := s.userRepo.ListWithAdvancedFilters(ctx, page, limit, userFilters)
+	// Usar el nuevo método optimizado
+	/*
+	  ***************************************************************************************
+	  Metodo: result, err := s.userRepo.ListWithTotalCount(ctx, params) -> ListwithTotalCount y ListwithAdvancedFilters
+	  Objetivo: Listar usuarios con filtros avanzados y paginacion optimizada
+	  Fecha: 19-09-2025
+	  Descripcion: se puede usar este metodo para listar usuarios con filtros avanzados y paginacion optimizada
+	  ***************************************************************************************
+	*/
+	result, err := s.userRepo.ListWithTotalCount(ctx, params)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	userInfos := make([]*UserInfo, len(users))
+	// Calcular total para compatibilidad
+	var total int
+	if result.TotalCount != nil {
+		total = *result.TotalCount
+	} else {
+		// Estimar total basado en resultados
+		total = len(result.Users)
+		if result.HasNextPage {
+			total = ((page - 1) * limit) + len(result.Users) + 1
+		}
+	}
 
-	for i, user := range users {
+	// Convertir usuarios a UserInfo
+	userInfos := make([]*UserInfo, len(result.Users))
+
+	for i, user := range result.Users {
 		// Para cada usuario, obtener sus roles en esta empresa
 		roles, err := s.GetUserRoles(ctx, user.ID, empresaID)
 		if err != nil {
@@ -1096,7 +1224,7 @@ func (s *authServiceImpl) ListUsersInEmpresa(ctx context.Context, empresaID uuid
 			}
 		}
 
-		// Crear UserInfo (sin incluir todas las empresas para esta vista)
+		// Crear UserInfo
 		userInfos[i] = &UserInfo{
 			ID:               user.ID,
 			DNI:              user.DNI,
@@ -1110,7 +1238,7 @@ func (s *authServiceImpl) ListUsersInEmpresa(ctx context.Context, empresaID uuid
 			Verified:         user.Verified,
 			CreatedAt:        user.CreatedAt,
 			UpdatedAt:        user.UpdatedAt,
-			// Roles:            roleInfos,
+			// Roles:            roleInfos, // Descomenta si necesitas los roles
 		}
 	}
 

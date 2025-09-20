@@ -8,6 +8,7 @@ import (
 type EmpresaConRol struct {
     EmpresaID uuid.UUID `json:"empresaId"`
     Roles     []string  `json:"roles"`
+    Permissions []string  `json:"permissions,omitempty"`
 }
 
 // EmpresaWithRole mantener tu estructura existente para casos completos

@@ -13,7 +13,7 @@ import (
 type AuthService interface {
 	// Casos de uso básicos de autenticación
 	Register(ctx context.Context, dni, email, password, nombres, apellidoPaterno, apellidoMaterno, nombresCompletos string, fechaNacimiento time.Time, telefono, departamento, provincia, distrito, direccionCompleta string) (*entities.User, error)
-	Login(ctx context.Context, dni, password string) (string, error)
+	// Login(ctx context.Context, dni, password string) (string, error)
 	VerifyToken(ctx context.Context, token string) (*auth.TokenClaims, error)
 	// Logout invalida la sesión actual del usuario
     Logout(ctx context.Context, token string) error

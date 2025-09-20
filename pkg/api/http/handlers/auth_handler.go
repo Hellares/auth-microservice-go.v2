@@ -388,27 +388,70 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	
+
 	// Obtener empresas del usuario con roles y permisos
-	empresas, err := h.authService.GetUserEmpresasWithRoles(r.Context(), user.ID)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Error obteniendo empresas")
-		return
-	}
+	// empresas, err := h.authService.GetUserEmpresasWithRoles(r.Context(), user.ID)
+	// empresas, err := h.authService.GetUserEmpresasWithRolesOptimized(r.Context(), user.ID)
+	// if err != nil {
+	// 	respondWithError(w, http.StatusInternalServerError, "Error obteniendo empresas")
+	// 	return
+	// }
+	// ✅ CAMBIAR A MÉTODO OPTIMIZADO
+    empresasOptimizadas, err := h.authService.GetUserEmpresasWithRolesOptimized(r.Context(), user.ID)
+    if err != nil {
+        respondWithError(w, http.StatusInternalServerError, "Error obteniendo empresas")
+        return
+    }
+
+    // Convertir a formato compatible para el frontend
+    empresasCompatibles := make([]map[string]interface{}, len(empresasOptimizadas))
+    for i, empresa := range empresasOptimizadas {
+        // Determinar rol principal
+        principalRole := determinePrincipalRoleFromSlice(empresa.Roles)
+        
+        empresasCompatibles[i] = map[string]interface{}{
+            "id":            empresa.EmpresaID,
+            "roles":         empresa.Roles,
+            "principalRole": principalRole,
+            "permissions":   empresa.Permissions,
+        }
+    }
 
 	// Verificar si es SUPER_ADMIN del sistema
-	isSuperAdmin, _ := h.authService.HasSystemRole(r.Context(), user.ID, "SUPER_ADMIN")
+    isSuperAdmin, _ := h.authService.HasSystemRole(r.Context(), user.ID, "SUPER_ADMIN")
 
-	// Respuesta completa para que Flutter pueda decidir qué mostrar
-	respondWithJSON(w, http.StatusOK, Response{
-		Success: true,
-		Data: map[string]interface{}{
-			"token":                 token,        // Token básico (sin empresa específica)
-			"user":                  user,         // Información completa del usuario
-			"empresas":              empresas,     // Lista de empresas con roles
-			"isSuperAdmin":          isSuperAdmin, // Flag para permisos especiales
-			"needsEmpresaSelection": len(empresas) > 1, // Si tiene múltiples empresas
-		},
-	})
+    // Respuesta optimizada
+    respondWithJSON(w, http.StatusOK, Response{
+        Success: true,
+        Message: "Login inicial exitoso",
+        Data: map[string]interface{}{
+            "token":                 token,
+            "user":                  user,
+            "empresas":              empresasCompatibles,
+            "isSuperAdmin":          isSuperAdmin,
+            "needsEmpresaSelection": len(empresasOptimizadas) > 1,
+        },
+    })
+}
+
+// Función auxiliar para determinar rol principal
+func determinePrincipalRoleFromSlice(roles []string) string {
+    if len(roles) == 0 {
+        return "USER"
+    }
+
+    hierarchy := []string{"SUPER_ADMIN", "EMPRESA_ADMIN", "ADMIN_USERS", "EMPLEADO", "CLIENTE"}
+    
+    for _, hierarchyRole := range hierarchy {
+        for _, userRole := range roles {
+            if userRole == hierarchyRole {
+                return hierarchyRole
+            }
+        }
+    }
+
+    return roles[0]
 }
 
 // func (h *AuthHandler) SelectEmpresa(w http.ResponseWriter, r *http.Request) {

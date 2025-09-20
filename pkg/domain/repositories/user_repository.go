@@ -5,6 +5,7 @@ import (
 	"database/sql"
 
 	"auth-microservice-go.v2/pkg/domain/entities"
+	"auth-microservice-go.v2/pkg/infrastructure/persistence/postgres"
 
 	"github.com/google/uuid"
 )
@@ -35,7 +36,9 @@ type UserRepository interface {
 	List(ctx context.Context, page, limit int) ([]*entities.User, int, error)
 	FindByIDs(ctx context.Context, ids []uuid.UUID, page, limit int) ([]*entities.User, int, error)
 	ListWithFilters(ctx context.Context, page, limit int, filters map[string]string) ([]*entities.User, int, error)
-	ListWithAdvancedFilters(ctx context.Context, page, limit int, filters map[string]interface{}) ([]*entities.User, int, error)
+	// ListWithAdvancedFilters(ctx context.Context, page, limit int, filters map[string]interface{}) ([]*entities.User, int, error)
+	ListWithAdvancedFilters(ctx context.Context, params postgres.ListUsersParams) (postgres.ListUsersResult, error)
+	ListWithTotalCount(ctx context.Context, params postgres.ListUsersParams) (postgres.ListUsersResult, error)
 
 	// AGREGAR ESTOS MÉTODOS DE TRANSACCIONES:
     BeginTx(ctx context.Context) (*sql.Tx, error)

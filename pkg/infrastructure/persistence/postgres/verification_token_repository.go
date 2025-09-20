@@ -63,7 +63,7 @@ func (r *verificationTokenRepository) FindByToken(ctx context.Context, token str
     query := `
         SELECT id, user_id, token, type, expires_at, created_at
         FROM verification_tokens
-        WHERE token = $1
+        WHERE token = $1 AND expires_at > NOW()
     `
 
     var vt entities.VerificationToken
@@ -131,7 +131,7 @@ func (r *verificationTokenRepository) FindActiveByUserAndType(ctx context.Contex
     query := `
         SELECT id, user_id, token, type, expires_at, created_at
         FROM verification_tokens
-        WHERE user_id = $1 AND type = $2 AND expires_at > $3
+        WHERE user_id = $1 AND type = $2 AND expires_at > NOW()
         ORDER BY created_at DESC
         LIMIT 1
     `

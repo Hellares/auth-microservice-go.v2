@@ -5,7 +5,7 @@ database:
   user: "postgres"
   password: "jtorres159."
   name: "auth_v2_dev"
-  max_open_conns: 25
+  max_open_conns: 50
   max_idle_conns: 25
   conn_max_lifetime: "15m"
 

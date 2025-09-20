@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,6 +15,54 @@ import (
 
 	"auth-microservice-go.v2/pkg/domain/entities"
 )
+
+// ================================================================
+// TIPOS OPTIMIZADOS PARA FILTROS Y PAGINACIÓN
+// ================================================================
+
+// ListUsersParams - Parámetros para búsqueda avanzada de usuarios
+type ListUsersParams struct {
+	// Filtros básicos
+	Status   *entities.UserStatus `json:"status,omitempty"`
+	Verified *bool                `json:"verified,omitempty"`
+	
+	// Búsqueda de texto (usa full-text search)
+	Search *string `json:"search,omitempty"`
+	
+	// Filtros específicos
+	IDs         []uuid.UUID `json:"ids,omitempty"`
+	Departamento *string     `json:"departamento,omitempty"`
+	Provincia   *string     `json:"provincia,omitempty"`
+	Distrito    *string     `json:"distrito,omitempty"`
+	
+	// Filtros de fecha
+	CreatedAfter  *time.Time `json:"created_after,omitempty"`
+	CreatedBefore *time.Time `json:"created_before,omitempty"`
+	LastLoginAfter *time.Time `json:"last_login_after,omitempty"`
+	
+	// Paginación
+	Limit  int `json:"limit"`
+	Offset int `json:"offset"`
+	
+	// Ordenamiento
+	SortBy    *string `json:"sort_by,omitempty"`    // "created_at", "last_login", "relevance"
+	SortOrder *string `json:"sort_order,omitempty"` // "asc", "desc"
+}
+
+// ListUsersResult - Resultado optimizado con metadata de paginación
+type ListUsersResult struct {
+	Users       []*entities.User `json:"users"`
+	HasNextPage bool             `json:"has_next_page"`
+	TotalCount  *int             `json:"total_count,omitempty"` // Solo cuando se requiera
+	Metadata    *QueryMetadata   `json:"metadata,omitempty"`
+}
+
+// QueryMetadata - Metadata adicional para debugging y optimización
+type QueryMetadata struct {
+	ExecutionTime time.Duration `json:"execution_time"`
+	QueryUsedFTS  bool          `json:"query_used_fts"` // Si usó full-text search
+	IndexesUsed   []string      `json:"indexes_used,omitempty"`
+}
 
 type userRepository struct {
 	db *sqlx.DB
@@ -794,88 +843,423 @@ func (r *userRepository) ListWithFilters(ctx context.Context, page, limit int, f
 	return users, total, nil
 }
 
-func (r *userRepository) ListWithAdvancedFilters(ctx context.Context, page, limit int, filters map[string]interface{}) ([]*entities.User, int, error) {
-	// Base de la consulta
-	baseQuery := `FROM users WHERE 1=1`
-	args := []interface{}{}
-	argIndex := 1
+// func (r *userRepository) ListWithAdvancedFilters(ctx context.Context, page, limit int, filters map[string]interface{}) ([]*entities.User, int, error) {
+// 	// Base de la consulta
+// 	baseQuery := `FROM users WHERE 1=1`
+// 	args := []interface{}{}
+// 	argIndex := 1
 
-	// Aplicar filtros
-	if status, ok := filters["status"].(string); ok && status != "" {
-		baseQuery += fmt.Sprintf(" AND status = $%d", argIndex)
-		args = append(args, status)
-		argIndex++
+// 	// Aplicar filtros
+// 	if status, ok := filters["status"].(string); ok && status != "" {
+// 		baseQuery += fmt.Sprintf(" AND status = $%d", argIndex)
+// 		args = append(args, status)
+// 		argIndex++
+// 	}
+
+// 	if search, ok := filters["search"].(string); ok && search != "" {
+// 		baseQuery += fmt.Sprintf(` AND (
+// 			dni ILIKE $%d OR 
+// 			email ILIKE $%d OR 
+// 			nombres ILIKE $%d OR 
+// 			apellido_paterno ILIKE $%d OR
+// 			apellido_materno ILIKE $%d OR
+// 			telefono ILIKE $%d
+// 		)`, argIndex, argIndex, argIndex, argIndex, argIndex, argIndex)
+// 		args = append(args, "%"+search+"%")
+// 		argIndex++
+// 	}
+
+// 	if ids, ok := filters["ids"].([]uuid.UUID); ok && len(ids) > 0 {
+// 		// Usar librería pq para array de UUIDs
+// 		baseQuery += fmt.Sprintf(" AND id = ANY($%d)", argIndex)
+// 		args = append(args, pq.Array(ids))
+// 		argIndex++
+// 	}
+
+// 	// Construir consultas
+// 	countQuery := `SELECT COUNT(*) ` + baseQuery
+// 	listQuery := `
+// 		SELECT 
+// 			id, dni, email, nombres, apellido_paterno, apellido_materno,
+// 			nombres_completos, telefono, avatar_url, status, verified, 
+// 			last_login, created_at, updated_at
+// 		` + baseQuery + ` ORDER BY created_at DESC LIMIT $` + fmt.Sprintf("%d", argIndex) + ` OFFSET $` + fmt.Sprintf("%d", argIndex+1)
+
+// 	// Añadir limit y offset
+// 	args = append(args, limit, (page-1)*limit)
+
+// 	// Obtener total
+// 	var total int
+// 	err := r.db.QueryRowContext(ctx, countQuery, args[:argIndex-1]...).Scan(&total)
+// 	if err != nil {
+// 		return nil, 0, err
+// 	}
+
+// 	// Ejecutar consulta con paginación
+// 	rows, err := r.db.QueryContext(ctx, listQuery, args...)
+// 	if err != nil {
+// 		return nil, 0, err
+// 	}
+// 	defer rows.Close()
+
+// 	var users []*entities.User
+// 	for rows.Next() {
+// 		var user entities.User
+// 		var lastLogin sql.NullTime
+
+// 		err := rows.Scan(
+// 			&user.ID,
+// 			&user.DNI,
+// 			&user.Email,
+// 			&user.Nombres,
+// 			&user.ApellidoPaterno,
+// 			&user.ApellidoMaterno,
+// 			&user.NombresCompletos,
+// 			&user.Telefono,
+// 			&user.AvatarURL,
+// 			&user.Status,
+// 			&user.Verified,
+// 			&lastLogin,
+// 			&user.CreatedAt,
+// 			&user.UpdatedAt,
+// 		)
+// 		if err != nil {
+// 			return nil, 0, err
+// 		}
+
+// 		if lastLogin.Valid {
+// 			user.LastLogin = &lastLogin.Time
+// 		}
+
+// 		users = append(users, &user)
+// 	}
+
+// 	if err = rows.Err(); err != nil {
+// 		return nil, 0, err
+// 	}
+
+// 	return users, total, nil
+// }
+
+/*
+  ***************************************************************************************
+  Metodo: ListWithAdvancedFilters
+  Objetivo: Listar usuarios con filtros avanzados y optimizados
+  Fecha: 19-09-2025
+  Descripcion: 
+  Autor: 
+  ***************************************************************************************
+*/
+
+func (r *userRepository) ListWithAdvancedFilters(ctx context.Context, params ListUsersParams) (ListUsersResult, error) {
+	startTime := time.Now()
+	
+	// Validar parámetros
+	if err := r.validateListParams(&params); err != nil {
+		return ListUsersResult{}, err
 	}
 
-	if search, ok := filters["search"].(string); ok && search != "" {
-		baseQuery += fmt.Sprintf(` AND (
-			dni ILIKE $%d OR 
-			email ILIKE $%d OR 
-			nombres ILIKE $%d OR 
-			apellido_paterno ILIKE $%d OR
-			apellido_materno ILIKE $%d OR
-			telefono ILIKE $%d
-		)`, argIndex, argIndex, argIndex, argIndex, argIndex, argIndex)
-		args = append(args, "%"+search+"%")
-		argIndex++
-	}
+	// Construir query dinámica optimizada
+	queryBuilder := r.newOptimizedQueryBuilder()
+	query, args, metadata := queryBuilder.BuildListQuery(params)
 
-	if ids, ok := filters["ids"].([]uuid.UUID); ok && len(ids) > 0 {
-		// Usar librería pq para array de UUIDs
-		baseQuery += fmt.Sprintf(" AND id = ANY($%d)", argIndex)
-		args = append(args, pq.Array(ids))
-		argIndex++
-	}
-
-	// Construir consultas
-	countQuery := `SELECT COUNT(*) ` + baseQuery
-	listQuery := `
-		SELECT 
-			id, dni, email, nombres, apellido_paterno, apellido_materno,
-			nombres_completos, telefono, avatar_url, status, verified, 
-			last_login, created_at, updated_at
-		` + baseQuery + ` ORDER BY created_at DESC LIMIT $` + fmt.Sprintf("%d", argIndex) + ` OFFSET $` + fmt.Sprintf("%d", argIndex+1)
-
-	// Añadir limit y offset
-	args = append(args, limit, (page-1)*limit)
-
-	// Obtener total
-	var total int
-	err := r.db.QueryRowContext(ctx, countQuery, args[:argIndex-1]...).Scan(&total)
+	// Ejecutar query
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, 0, err
+		return ListUsersResult{}, fmt.Errorf("failed to execute optimized list query: %w", err)
+	}
+	defer rows.Close()
+
+	// Procesar resultados
+	users, hasNextPage, err := r.processUserRows(rows, params.Limit)
+	if err != nil {
+		return ListUsersResult{}, err
 	}
 
-	// Ejecutar consulta con paginación
-	rows, err := r.db.QueryContext(ctx, listQuery, args...)
+	// Metadata de rendimiento
+	metadata.ExecutionTime = time.Since(startTime)
+
+	return ListUsersResult{
+		Users:       users,
+		HasNextPage: hasNextPage,
+		Metadata:    metadata,
+	}, nil
+}
+
+// ListWithTotalCount - Versión que incluye total count (más lenta)
+func (r *userRepository) ListWithTotalCount(ctx context.Context, params ListUsersParams) (ListUsersResult, error) {
+	startTime := time.Now()
+	
+	if err := r.validateListParams(&params); err != nil {
+		return ListUsersResult{}, err
+	}
+
+	queryBuilder := r.newOptimizedQueryBuilder()
+	query, args, metadata := queryBuilder.BuildListQueryWithTotal(params)
+	
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, 0, err
+		return ListUsersResult{}, fmt.Errorf("failed to execute query with total: %w", err)
 	}
 	defer rows.Close()
 
 	var users []*entities.User
+	var totalCount int
+	
+	for rows.Next() {
+		var user entities.User
+		var lastLogin sql.NullTime
+		var total int
+
+		err := rows.Scan(
+			&user.ID, &user.DNI, &user.Email, &user.Nombres, &user.ApellidoPaterno, &user.ApellidoMaterno,
+			&user.NombresCompletos, &user.Telefono, &user.AvatarURL, &user.Status, &user.Verified,
+			&lastLogin, &user.CreatedAt, &user.UpdatedAt, &total,
+		)
+		if err != nil {
+			return ListUsersResult{}, err
+		}
+
+		if lastLogin.Valid {
+			user.LastLogin = &lastLogin.Time
+		}
+
+		users = append(users, &user)
+		totalCount = total
+	}
+
+	hasNextPage := params.Offset+len(users) < totalCount
+	metadata.ExecutionTime = time.Since(startTime)
+
+	return ListUsersResult{
+		Users:       users,
+		HasNextPage: hasNextPage,
+		TotalCount:  &totalCount,
+		Metadata:    metadata,
+	}, nil
+}
+
+// ================================================================
+// QUERY BUILDER OPTIMIZADO
+// ================================================================
+
+type optimizedQueryBuilder struct {
+	repo *userRepository
+}
+
+func (r *userRepository) newOptimizedQueryBuilder() *optimizedQueryBuilder {
+	return &optimizedQueryBuilder{repo: r}
+}
+
+func (qb *optimizedQueryBuilder) BuildListQuery(params ListUsersParams) (string, []interface{}, *QueryMetadata) {
+	var (
+		queryParts []string
+		args       []interface{}
+		argIdx     = 1
+		metadata   = &QueryMetadata{}
+	)
+
+	// Base query optimizada
+	baseQuery := `
+	SELECT 
+		id, dni, email, nombres, apellido_paterno, apellido_materno,
+		nombres_completos, telefono, avatar_url, status, verified, 
+		last_login, created_at, updated_at
+	FROM users
+	WHERE 1=1`
+	
+	queryParts = append(queryParts, baseQuery)
+
+	// Filtros optimizados (en orden de selectividad)
+	if len(params.IDs) > 0 {
+		queryParts = append(queryParts, fmt.Sprintf("AND id = ANY($%d)", argIdx))
+		args = append(args, pq.Array(params.IDs))
+		argIdx++
+		metadata.IndexesUsed = append(metadata.IndexesUsed, "users_pkey")
+	}
+
+	if params.Status != nil {
+		queryParts = append(queryParts, fmt.Sprintf("AND status = $%d", argIdx))
+		args = append(args, *params.Status)
+		argIdx++
+		metadata.IndexesUsed = append(metadata.IndexesUsed, "idx_users_status")
+	}
+
+	if params.Verified != nil {
+		queryParts = append(queryParts, fmt.Sprintf("AND verified = $%d", argIdx))
+		args = append(args, *params.Verified)
+		argIdx++
+		metadata.IndexesUsed = append(metadata.IndexesUsed, "idx_users_verified")
+	}
+
+	// Filtros de ubicación
+	if params.Departamento != nil {
+		queryParts = append(queryParts, fmt.Sprintf("AND departamento = $%d", argIdx))
+		args = append(args, *params.Departamento)
+		argIdx++
+	}
+	if params.Provincia != nil {
+		queryParts = append(queryParts, fmt.Sprintf("AND provincia = $%d", argIdx))
+		args = append(args, *params.Provincia)
+		argIdx++
+	}
+	if params.Distrito != nil {
+		queryParts = append(queryParts, fmt.Sprintf("AND distrito = $%d", argIdx))
+		args = append(args, *params.Distrito)
+		argIdx++
+	}
+
+	// Filtros de fecha
+	if params.CreatedAfter != nil {
+		queryParts = append(queryParts, fmt.Sprintf("AND created_at >= $%d", argIdx))
+		args = append(args, *params.CreatedAfter)
+		argIdx++
+	}
+	if params.CreatedBefore != nil {
+		queryParts = append(queryParts, fmt.Sprintf("AND created_at <= $%d", argIdx))
+		args = append(args, *params.CreatedBefore)
+		argIdx++
+	}
+	if params.LastLoginAfter != nil {
+		queryParts = append(queryParts, fmt.Sprintf("AND last_login >= $%d", argIdx))
+		args = append(args, *params.LastLoginAfter)
+		argIdx++
+	}
+
+	// Búsqueda de texto (al final para mejor rendimiento)
+	if params.Search != nil && strings.TrimSpace(*params.Search) != "" {
+		searchTerm := strings.TrimSpace(*params.Search)
+		if len(searchTerm) > 2 {
+			queryParts = append(queryParts, fmt.Sprintf(`
+			AND to_tsvector('spanish',
+				coalesce(nombres,'') || ' ' ||
+				coalesce(apellido_paterno,'') || ' ' ||
+				coalesce(apellido_materno,'') || ' ' ||
+				coalesce(dni,'') || ' ' ||
+				coalesce(email,'') || ' ' ||
+				coalesce(telefono,'')
+			) @@ plainto_tsquery('spanish', $%d)`, argIdx))
+			args = append(args, searchTerm)
+			argIdx++
+			metadata.QueryUsedFTS = true
+			metadata.IndexesUsed = append(metadata.IndexesUsed, "idx_users_search_gin")
+		} else {
+			queryParts = append(queryParts, fmt.Sprintf(`
+			AND (dni ILIKE $%d OR email ILIKE $%d)`, argIdx, argIdx))
+			args = append(args, "%"+searchTerm+"%", "%"+searchTerm+"%")
+			argIdx++
+		}
+	}
+
+	// Ordenamiento optimizado
+	orderClause := qb.buildOptimizedOrderClause(params, metadata)
+	queryParts = append(queryParts, orderClause)
+
+	// Paginación con LIMIT+1 trick
+	limitPlusOne := params.Limit + 1
+	queryParts = append(queryParts, fmt.Sprintf("LIMIT $%d OFFSET $%d", argIdx, argIdx+1))
+	args = append(args, limitPlusOne, params.Offset)
+
+	finalQuery := strings.Join(queryParts, "\n")
+	return finalQuery, args, metadata
+}
+
+func (qb *optimizedQueryBuilder) BuildListQueryWithTotal(params ListUsersParams) (string, []interface{}, *QueryMetadata) {
+	query, args, metadata := qb.BuildListQuery(params)
+	
+	// Reemplazar SELECT para incluir COUNT() OVER()
+	query = strings.Replace(query, 
+		"created_at, updated_at\n\tFROM users", 
+		"created_at, updated_at, COUNT(*) OVER() as total_count\n\tFROM users", 1)
+	
+	return query, args, metadata
+}
+
+func (qb *optimizedQueryBuilder) buildOptimizedOrderClause(params ListUsersParams, metadata *QueryMetadata) string {
+	sortBy := "created_at"
+	sortOrder := "DESC"
+
+	if params.SortBy != nil {
+		switch *params.SortBy {
+		case "created_at", "last_login":
+			sortBy = *params.SortBy
+		case "relevance":
+			if metadata.QueryUsedFTS {
+				return `ORDER BY ts_rank(
+					to_tsvector('spanish', 
+						coalesce(nombres,'') || ' ' || 
+						coalesce(apellido_paterno,'') || ' ' || 
+						coalesce(apellido_materno,'') || ' ' || 
+						coalesce(dni,'') || ' ' || 
+						coalesce(email,'')
+					), 
+					plainto_tsquery('spanish', $3)
+				) DESC, created_at DESC`
+			}
+		}
+	}
+
+	if params.SortOrder != nil && (*params.SortOrder == "asc" || *params.SortOrder == "ASC") {
+		sortOrder = "ASC"
+	}
+
+	return fmt.Sprintf("ORDER BY %s %s", sortBy, sortOrder)
+}
+
+// ================================================================
+// FUNCIONES DE APOYO
+// ================================================================
+
+func (r *userRepository) validateListParams(params *ListUsersParams) error {
+	if params.Limit <= 0 {
+		params.Limit = 20
+	}
+	if params.Limit > 100 {
+		return fmt.Errorf("limit cannot exceed 100, got %d", params.Limit)
+	}
+	if params.Offset < 0 {
+		params.Offset = 0
+	}
+	if len(params.IDs) > 1000 {
+		return fmt.Errorf("too many IDs provided: %d (max 1000)", len(params.IDs))
+	}
+
+	if params.Status != nil {
+		validStatuses := map[entities.UserStatus]bool{
+			"ACTIVE": true, "INACTIVE": true, "SUSPENDED": true, "DELETED": true,
+		}
+		if !validStatuses[*params.Status] {
+			return fmt.Errorf("invalid status: %s", *params.Status)
+		}
+	}
+
+	if params.Search != nil {
+		search := strings.TrimSpace(*params.Search)
+		if len(search) > 100 {
+			return fmt.Errorf("search term too long: %d characters (max 100)", len(search))
+		}
+		if len(search) == 0 {
+			params.Search = nil
+		}
+	}
+
+	return nil
+}
+
+func (r *userRepository) processUserRows(rows *sql.Rows, limit int) ([]*entities.User, bool, error) {
+	var users []*entities.User
+	
 	for rows.Next() {
 		var user entities.User
 		var lastLogin sql.NullTime
 
 		err := rows.Scan(
-			&user.ID,
-			&user.DNI,
-			&user.Email,
-			&user.Nombres,
-			&user.ApellidoPaterno,
-			&user.ApellidoMaterno,
-			&user.NombresCompletos,
-			&user.Telefono,
-			&user.AvatarURL,
-			&user.Status,
-			&user.Verified,
-			&lastLogin,
-			&user.CreatedAt,
-			&user.UpdatedAt,
+			&user.ID, &user.DNI, &user.Email, &user.Nombres, &user.ApellidoPaterno, &user.ApellidoMaterno,
+			&user.NombresCompletos, &user.Telefono, &user.AvatarURL, &user.Status, &user.Verified,
+			&lastLogin, &user.CreatedAt, &user.UpdatedAt,
 		)
 		if err != nil {
-			return nil, 0, err
+			return nil, false, fmt.Errorf("failed to scan user: %w", err)
 		}
 
 		if lastLogin.Valid {
@@ -885,12 +1269,26 @@ func (r *userRepository) ListWithAdvancedFilters(ctx context.Context, page, limi
 		users = append(users, &user)
 	}
 
-	if err = rows.Err(); err != nil {
-		return nil, 0, err
+	if err := rows.Err(); err != nil {
+		return nil, false, fmt.Errorf("error iterating rows: %w", err)
 	}
 
-	return users, total, nil
+	hasNextPage := len(users) > limit
+	if hasNextPage {
+		users = users[:limit]
+	}
+
+	return users, hasNextPage, nil
 }
+/*
+  ***************************************************************************************
+  Metodo: ListWithAdvancedFilters
+  Objetivo: Listar usuarios con filtros avanzados y optimizados
+  Fecha: 19-09-2025
+  Descripcion:  TERMINA LA FUNCION
+  Autor: 
+  ***************************************************************************************
+*/
 
 // BeginTx inicia una nueva transacción
 func (r *userRepository) BeginTx(ctx context.Context) (*sql.Tx, error) {
