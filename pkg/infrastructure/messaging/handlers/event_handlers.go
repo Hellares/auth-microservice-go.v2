@@ -102,41 +102,48 @@ func NewEventHandler(authService services.AuthService) *EventHandler {
 // 1. Validar que el creador existe o crearlo si no existe
 // 2. Asignar rol de EMPRESA_ADMIN al creador
 // 3. Manejar errores de duplicación
+
 func (h *EventHandler) HandleEmpresaCreated(payload []byte) error {
-	log.Printf("Procesando evento empresa.created: %s", string(payload))
+    log.Printf("=== PROCESANDO EVENTO EMPRESA.CREATED ===")
+    log.Printf("Payload recibido: %s", string(payload))
 
-	// Estructura para manejar el formato de mensaje de NestJS/otros frameworks
-	type EventWrapper struct {
-		Pattern string          `json:"pattern"`
-		Data    json.RawMessage `json:"data"`
-		Id      string          `json:"id,omitempty"`
-	}
+    var event EmpresaCreatedEvent
 
-	var event EmpresaCreatedEvent
+    // ✅ MANEJAR WRAPPER DE NESTJS
+    type EventWrapper struct {
+        Pattern string          `json:"pattern"`
+        Data    json.RawMessage `json:"data"`
+    }
 
-	// Intentar deserializar como wrapper primero
-	var wrapper EventWrapper
-	if err := json.Unmarshal(payload, &wrapper); err == nil && wrapper.Data != nil {
-		// Es un mensaje wrapeado, extraer los datos internos
-		if err := json.Unmarshal(wrapper.Data, &event); err != nil {
-			log.Printf("Error deserializando datos del wrapper: %v", err)
-			return fmt.Errorf("error deserializando datos envueltos: %v", err)
-		}
-	} else {
-		// Intentar deserializar directamente
-		if err := json.Unmarshal(payload, &event); err != nil {
-			log.Printf("Error deserializando evento directo: %v", err)
-			return fmt.Errorf("error deserializando evento: %v", err)
-		}
-	}
+    var wrapper EventWrapper
+    if err := json.Unmarshal(payload, &wrapper); err == nil && wrapper.Data != nil && wrapper.Pattern == "empresa.created" {
+        log.Printf("🔍 Mensaje wrapeado detectado, extrayendo datos...")
+        // Es un mensaje wrapeado, extraer los datos internos
+        if err := json.Unmarshal(wrapper.Data, &event); err != nil {
+            log.Printf("Error deserializando datos del wrapper: %v", err)
+            return fmt.Errorf("error deserializando datos envueltos: %v", err)
+        }
+    } else {
+        // ✅ FALLBACK: Intentar deserializar directamente
+        if err := json.Unmarshal(payload, &event); err != nil {
+            log.Printf("Error deserializando evento directo: %v", err)
+            return fmt.Errorf("error deserializando evento: %v", err)
+        }
+    }
 
-	// Validar datos críticos del evento
-	if err := h.validateEmpresaCreatedEvent(&event); err != nil {
-		return fmt.Errorf("evento inválido: %v", err)
-	}
+    log.Printf("Evento deserializado correctamente:")
+    log.Printf("  ID: %s", event.ID)
+    log.Printf("  RUC: %s", event.RUC)
+    log.Printf("  CreadorID: %s", event.CreadorID)
+    log.Printf("  CreadorEmail: %s", event.CreadorEmail)
 
-	// Procesar el evento
-	return h.processEmpresaCreatedEvent(&event)
+    if err := h.validateEmpresaCreatedEvent(&event); err != nil {
+        log.Printf("Validación falló: %v", err)
+        return fmt.Errorf("evento inválido: %v", err)
+    }
+
+    log.Printf("Validación exitosa, procesando evento...")
+    return h.processEmpresaCreatedEvent(&event)
 }
 
 // validateEmpresaCreatedEvent valida que el evento tenga los datos necesarios
@@ -466,30 +473,41 @@ func (h *EventHandler) createUserFromClienteEvent(event *ClienteCreatedEvent) (*
 // ============================================================================
 
 // RegisterEventHandlers registra todos los manejadores de eventos en el EventBus
+// func RegisterEventHandlers(eventBus rabbitmq.EventBus, handler *EventHandler) error {
+// 	log.Printf("Registrando manejadores de eventos...")
+
+// 	// Suscribirse a eventos de creación de empresa
+// 	if err := eventBus.Subscribe("empresa.created", handler.HandleEmpresaCreated); err != nil {
+// 		return fmt.Errorf("error registrando handler empresa.created: %v", err)
+// 	}
+
+// 	// Suscribirse a eventos de creación de usuario en empresa
+// 	if err := eventBus.Subscribe("usuario.created", handler.HandleUsuarioCreated); err != nil {
+// 		return fmt.Errorf("error registrando handler usuario.created: %v", err)
+// 	}
+
+// 	// Suscribirse a eventos de creación de cliente
+// 	if err := eventBus.Subscribe("cliente.created", handler.HandleClienteCreated); err != nil {
+// 		return fmt.Errorf("error registrando handler cliente.created: %v", err)
+// 	}
+
+// 	// Agregar más suscripciones según necesites
+// 	// eventBus.Subscribe("usuario.role.updated", handler.HandleUserRoleUpdated)
+// 	// eventBus.Subscribe("empresa.deleted", handler.HandleEmpresaDeleted)
+
+// 	log.Printf("Todos los manejadores de eventos registrados exitosamente")
+// 	return nil
+// }
 func RegisterEventHandlers(eventBus rabbitmq.EventBus, handler *EventHandler) error {
-	log.Printf("Registrando manejadores de eventos...")
+    log.Printf("Registrando manejadores de eventos...")
 
-	// Suscribirse a eventos de creación de empresa
-	if err := eventBus.Subscribe("empresa.created", handler.HandleEmpresaCreated); err != nil {
-		return fmt.Errorf("error registrando handler empresa.created: %v", err)
-	}
+    // Solo registrar empresa.created por ahora
+    if err := eventBus.Subscribe("empresa.created", handler.HandleEmpresaCreated); err != nil {
+        return fmt.Errorf("error registrando handler empresa.created: %v", err)
+    }
 
-	// Suscribirse a eventos de creación de usuario en empresa
-	if err := eventBus.Subscribe("usuario.created", handler.HandleUsuarioCreated); err != nil {
-		return fmt.Errorf("error registrando handler usuario.created: %v", err)
-	}
-
-	// Suscribirse a eventos de creación de cliente
-	if err := eventBus.Subscribe("cliente.created", handler.HandleClienteCreated); err != nil {
-		return fmt.Errorf("error registrando handler cliente.created: %v", err)
-	}
-
-	// Agregar más suscripciones según necesites
-	// eventBus.Subscribe("usuario.role.updated", handler.HandleUserRoleUpdated)
-	// eventBus.Subscribe("empresa.deleted", handler.HandleEmpresaDeleted)
-
-	log.Printf("Todos los manejadores de eventos registrados exitosamente")
-	return nil
+    log.Printf("Handler empresa.created registrado exitosamente")
+    return nil
 }
 
 // ============================================================================
